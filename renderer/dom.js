@@ -79,14 +79,21 @@ export function field(labelText, input, hint) {
   ])
 }
 
-export function toggle(checked, onChange, label) {
+/**
+ * Checkbox styled as a switch. The wrapper is a <label> so a click anywhere in the
+ * box activates the input, and `.track` is pointer-events: none in the stylesheet —
+ * it is an absolutely positioned later sibling, so it paints over the input and
+ * would otherwise swallow every click.
+ */
+export function toggle(checked, onChange, label, { disabled = false } = {}) {
   const input = el('input', {
     type: 'checkbox',
     checked,
+    disabled: disabled || undefined,
     'aria-label': label,
     onChange: (e) => onChange(e.target.checked),
   })
-  return el('span', { class: 'switch' }, [input, el('span', { class: 'track' })])
+  return el('label', { class: 'switch' }, [input, el('span', { class: 'track' })])
 }
 
 /**

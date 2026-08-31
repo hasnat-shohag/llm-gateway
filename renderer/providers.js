@@ -32,8 +32,18 @@ const COLUMNS = [
 ]
 
 let banner = null
-/** Name of the provider whose row has an in-flight write, for its spinner. */
+/**
+ * Name of the provider whose row has an in-flight write. Every write moves
+ * providers.json's version, so a second one started before the first lands is
+ * refused as a stale-version conflict — this is what gates the controls.
+ */
 let busyName = null
+/**
+ * The `enabled` value a row is being saved with. A poll tick's emit() re-renders
+ * from `state.providers`, which still holds the pre-write value until the save
+ * lands, so without this the switch visibly snaps back and then flips again.
+ */
+let pendingEnabled = null
 
 function setBanner(text, kind = 'info') {
   banner = text ? { text, kind } : null
@@ -147,6 +157,8 @@ function move(index, delta) {
   const [item] = next.splice(index, 1)
   next.splice(target, 0, item)
   busyName = item.name
+  // Paint the gated controls before awaiting, not after.
+  render()
   save(next, { onDone: () => { busyName = null; render() } })
 }
 
@@ -160,14 +172,20 @@ async function remove(provider) {
   })
   if (!ok) return
   busyName = provider.name
+  render()
   save(state.providers.filter((p) => p.name !== provider.name), { onDone: () => { busyName = null; render() } })
 }
 
 function setEnabled(provider, enabled) {
+  if (busyName !== null) return
   busyName = provider.name
+  pendingEnabled = { name: provider.name, enabled }
+  // Paint the disabled switch before awaiting: a second click during the write
+  // would carry the pre-write version and come back as a stale-version conflict.
+  render()
   save(
     state.providers.map((p) => (p.name === provider.name ? { ...p, enabled } : p)),
-    { onDone: () => { busyName = null; render() } },
+    { onDone: () => { busyName = null; pendingEnabled = null; render() } },
   )
 }
 
@@ -348,9 +366,16 @@ async function probeDialog(provider) {
 
 /* --------------------------------------------------------------------- rows */
 
-function providerRow(provider, index) {
+function providerRow(row, index) {
+  // While this row's toggle is in flight, render the value being saved rather than
+  // the one still on disk — including in the health cell, which reads `enabled`.
+  const provider = pendingEnabled?.name === row.name
+    ? { ...row, enabled: pendingEnabled.enabled }
+    : row
   const isPassthrough = provider.authStyle === 'passthrough'
-  const busy = busyName === provider.name
+  // Any in-flight write invalidates the version every other control would send,
+  // so all of them are gated, not just the busy row's.
+  const writing = busyName !== null
   const last = index === state.providers.length - 1
 
   return el('tr', { class: provider.enabled ? undefined : 'off' }, [
@@ -358,6 +383,7 @@ function providerRow(provider, index) {
       provider.enabled,
       (checked) => setEnabled(provider, checked),
       `${provider.enabled ? 'Disable' : 'Enable'} ${provider.name}`,
+      { disabled: writing },
     )]),
     el('td', {}, [
       el('div', { class: 'primary-cell', text: provider.name }),
@@ -373,11 +399,11 @@ function providerRow(provider, index) {
     el('td', { class: 'num' }, [trafficCell(provider)]),
     el('td', { class: 'actions' }, [
       el('div', { class: 'row-actions' }, [
-        iconButton('chevronUp', `Move ${provider.name} up`, () => move(index, -1), { disabled: index === 0 || busy }),
-        iconButton('chevronDown', `Move ${provider.name} down`, () => move(index, 1), { disabled: last || busy }),
-        iconButton('pencil', `Edit ${provider.name}`, () => editDialog(provider), { disabled: busy }),
-        iconButton('beaker', `Test ${provider.name}`, () => probeDialog(provider), { disabled: isPassthrough || busy }),
-        iconButton('trash', `Delete ${provider.name}`, () => remove(provider), { kind: 'quiet danger', disabled: busy }),
+        iconButton('chevronUp', `Move ${provider.name} up`, () => move(index, -1), { disabled: index === 0 || writing }),
+        iconButton('chevronDown', `Move ${provider.name} down`, () => move(index, 1), { disabled: last || writing }),
+        iconButton('pencil', `Edit ${provider.name}`, () => editDialog(provider), { disabled: writing }),
+        iconButton('beaker', `Test ${provider.name}`, () => probeDialog(provider), { disabled: isPassthrough || writing }),
+        iconButton('trash', `Delete ${provider.name}`, () => remove(provider), { kind: 'quiet danger', disabled: writing }),
       ]),
     ]),
   ])

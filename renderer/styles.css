@@ -566,6 +566,9 @@ input.aria-invalid, input[aria-invalid="true"] { border-color: var(--danger); }
 .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
 .switch .track {
   position: absolute; inset: 0;
+  /* A later absolutely positioned sibling paints over the input, so without this
+     the track eats the click and the checkbox never changes. */
+  pointer-events: none;
   background: var(--bg-raised);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-full);
@@ -582,6 +585,7 @@ input.aria-invalid, input[aria-invalid="true"] { border-color: var(--danger); }
 .switch input:checked + .track { background: var(--accent); border-color: var(--accent); }
 .switch input:checked + .track::after { transform: translateX(14px); background: var(--on-accent); }
 .switch input:focus-visible + .track { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.switch input:disabled { cursor: default; }
 .switch input:disabled + .track { opacity: .45; }
 
 .segmented {
