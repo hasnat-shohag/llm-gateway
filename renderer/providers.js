@@ -7,8 +7,8 @@ import { icon } from './icons.js'
 import { state, reloadProviders, emit } from './store.js'
 
 const AUTH_STYLES = [
-  { value: 'x-api-key', label: 'x-api-key (default)' },
-  { value: 'bearer', label: 'bearer' },
+  { value: 'bearer', label: 'bearer (default)' },
+  { value: 'x-api-key', label: 'x-api-key' },
   { value: 'passthrough', label: 'passthrough (official subscription)' },
 ]
 
@@ -197,7 +197,7 @@ function editDialog(existing, preset = {}) {
     ? { ...existing, originalName: existing.name, newApiKey: undefined }
     : {
       name: '', baseUrl: '', enabled: true, weight: 1,
-      authStyle: 'x-api-key', sanitize: null, apiKeySet: false, ...preset,
+      authStyle: 'bearer', sanitize: null, apiKeySet: false, ...preset,
     }
 
   const errorLine = el('div', { class: 'notice bad', hidden: true }, [
