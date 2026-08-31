@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!--
+    The renderer makes no network requests at all — every byte of data arrives over
+    IPC from the main process. That is what lets connect-src be 'none', which in
+    turn means there is no CORS surface and no way for page content to phone home.
+  -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>LLM Gateway</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="banner" class="banner" hidden></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot" id="status-dot"></span>
+      <div>
+        <h1>LLM Gateway</h1>
+        <p id="status-line" class="muted">starting…</p>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-view="providers" class="active">Providers</button>
+      <button data-view="dashboard">Usage</button>
+      <button data-view="settings">Setup</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="view-providers" class="view"></section>
+    <section id="view-dashboard" class="view" hidden></section>
+    <section id="view-settings" class="view" hidden></section>
+  </main>
+
+  <div id="modal-root"></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

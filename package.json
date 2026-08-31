@@ -1,0 +1,35 @@
+{
+  "name": "llm-gateway-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Desktop app that runs and manages the local LLM gateway for Claude Code",
+  "homepage": "https://github.com/hasnat-shohag/llm-gateway-for-claude-code",
+  "author": "Hasnat Shohag",
+  "//desktopName": "Electron reads this as the app id / WM_CLASS, which is what links a running window and its tray icon to the installed .desktop entry. linux.syncDesktopName keeps the generated entry's filename in step.",
+  "desktopName": "llm-gateway.desktop",
+  "main": "main/main.js",
+  "scripts": {
+    "build:gateway": "tsc -p tsconfig.gateway.json && node scripts/finalize-gateway-build.js",
+    "gen:icon": "node scripts/generate-icon.js",
+    "start": "npm run build:gateway && electron . --ozone-platform=x11",
+    "dist": "npm run build:gateway && electron-builder",
+    "test": "npm run build:gateway && node --test test/*.test.js",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "dotenv": "^16.4.7",
+    "fastify": "^5.2.1",
+    "pino": "^9.6.0",
+    "undici": "^7.4.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "electron": "42.10.1",
+    "electron-builder": "^26.0.12",
+    "typescript": "^5.7.3"
+  }
+}

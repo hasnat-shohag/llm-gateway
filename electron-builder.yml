@@ -1,0 +1,75 @@
+appId: com.vivasoft.llm-gateway
+productName: LLM Gateway
+copyright: LLM Gateway
+directories:
+  output: release
+  buildResources: build-resources
+
+# `files` becomes an allowlist the moment it is set, so everything the app needs
+# at runtime has to be listed. Production node_modules are always included.
+files:
+  - main/**
+  - preload/**
+  - renderer/**
+  - build/gateway/**
+  - package.json
+  - '!**/*.map'
+  - '!node_modules/better-sqlite3/build/Release/obj.target/**'
+  - '!node_modules/better-sqlite3/deps/**'
+  - '!node_modules/better-sqlite3/src/**'
+
+# process.dlopen cannot load a native addon from inside the asar, so it must be
+# unpacked. electron-builder usually detects this; being explicit is free and the
+# failure mode ("Could not locate the bindings file") is confusing.
+asarUnpack:
+  - '**/*.node'
+  - node_modules/better-sqlite3/**
+
+npmRebuild: true
+# Left false so `better-sqlite3` uses its published Electron prebuild — which is
+# the reason Electron is pinned to 43 (ABI 148), the newest ABI it ships a binary
+# for. Set this to true only if you must build from source, and note that it then
+# requires python3 + make + g++ on the build host.
+buildDependenciesFromSource: false
+
+linux:
+  target:
+    - deb
+    - AppImage
+  category: Development
+  synopsis: Local LLM gateway and provider manager for Claude Code
+  description: >-
+    Runs a local Anthropic-compatible gateway in the background and gives you a
+    GUI to manage providers, watch health, and track token cost.
+  # deb refuses to build without a maintainer, and package.json has no author.
+  maintainer: Vivasoft <dev@vivasoft.example>
+  # Load-bearing: the deb's /usr/bin symlink and the installed icon are both named
+  # after this, and main/autostart.js looks for /usr/bin/llm-gateway when writing
+  # the XDG autostart entry.
+  executableName: llm-gateway
+  # Electron's Wayland backend segfaults on window creation under GNOME/mutter, and
+  # Ozone is chosen before the app's own JS runs, so the flag cannot be set from
+  # main.js. Passing --ozone-platform=wayland after this opts back into Wayland.
+  executableArgs:
+    - --ozone-platform=x11
+  # Pairs with `desktopName` in package.json: without the two, desktop environments
+  # do not associate the running window or the tray icon with the installed entry.
+  syncDesktopName: true
+  desktop:
+    entry:
+      Categories: Development;Utility;
+
+deb:
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+  recommends:
+    - libayatana-appindicator3-1
+  priority: optional
