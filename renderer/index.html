@@ -6,6 +6,11 @@
     The renderer makes no network requests at all — every byte of data arrives over
     IPC from the main process. That is what lets connect-src be 'none', which in
     turn means there is no CORS surface and no way for page content to phone home.
+
+    style-src stays 'self' with no 'unsafe-inline': every color that varies at
+    runtime (chart series, legend swatches) is applied through the CSSOM
+    (element.style.setProperty) or as an SVG presentation attribute, neither of
+    which style-src governs. Nothing here needs an inline <style> or a style="".
   -->
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
@@ -13,30 +18,54 @@
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div id="banner" class="banner" hidden></div>
-
-  <header class="topbar">
+  <!--
+    The window is frameless (main.js sets frame: false), so this bar is both the
+    drag handle and the nav. -webkit-app-region: drag lives on .titlebar and is
+    turned back off on every interactive descendant.
+  -->
+  <header class="titlebar" id="titlebar">
     <div class="brand">
-      <span class="dot" id="status-dot"></span>
-      <div>
-        <h1>LLM Gateway</h1>
-        <p id="status-line" class="muted">starting…</p>
-      </div>
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor"
+           stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true" focusable="false">
+        <path d="M2 8h2.6l1.7-4 2.2 8 1.8-4H14"></path>
+      </svg>
+      <h1>LLM Gateway</h1>
     </div>
-    <nav class="tabs" id="tabs">
-      <button data-view="providers" class="active">Providers</button>
-      <button data-view="dashboard">Usage</button>
-      <button data-view="settings">Setup</button>
+
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
+      <button type="button" role="tab" id="tab-providers" data-view="providers"
+              aria-controls="view-providers" aria-selected="true" tabindex="0">Providers</button>
+      <button type="button" role="tab" id="tab-dashboard" data-view="dashboard"
+              aria-controls="view-dashboard" aria-selected="false" tabindex="-1">Usage</button>
+      <button type="button" role="tab" id="tab-settings" data-view="settings"
+              aria-controls="view-settings" aria-selected="false" tabindex="-1">Setup</button>
     </nav>
+
+    <div class="window-controls" id="window-controls">
+      <button type="button" id="win-minimize" aria-label="Minimize window"></button>
+      <button type="button" id="win-maximize" aria-label="Maximize window"></button>
+      <button type="button" id="win-close" class="close" aria-label="Close window"></button>
+    </div>
   </header>
 
-  <main>
-    <section id="view-providers" class="view"></section>
-    <section id="view-dashboard" class="view" hidden></section>
-    <section id="view-settings" class="view" hidden></section>
+  <!-- Single live region for state the user must notice; the status bar is silent. -->
+  <div id="banner" class="banner" role="status" aria-live="polite" hidden></div>
+
+  <main id="main">
+    <section id="view-onboarding" class="view" role="region" aria-label="Setup guide" hidden></section>
+    <section id="view-providers" class="view" role="tabpanel" aria-labelledby="tab-providers" tabindex="0"></section>
+    <section id="view-dashboard" class="view" role="tabpanel" aria-labelledby="tab-dashboard" tabindex="0" hidden></section>
+    <section id="view-settings" class="view" role="tabpanel" aria-labelledby="tab-settings" tabindex="0" hidden></section>
   </main>
 
-  <div id="modal-root"></div>
+  <footer class="statusbar" id="statusbar">
+    <span class="dot" id="status-dot"></span>
+    <span id="status-line">starting…</span>
+    <span class="right" id="status-metrics"></span>
+  </footer>
+
+  <div id="dialog-root"></div>
 
   <script type="module" src="./app.js"></script>
 </body>
