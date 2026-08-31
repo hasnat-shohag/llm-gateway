@@ -10,16 +10,21 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 const gatewayStateListeners = new Set()
+const maximizeListeners = new Set()
 
-ipcRenderer.on('gateway:state-changed', (_e, state) => {
-  for (const fn of gatewayStateListeners) {
+/** One dispatcher per channel; a throwing listener must not break the channel. */
+function fanOut(listeners, value) {
+  for (const fn of listeners) {
     try {
-      fn(state)
+      fn(value)
     } catch {
-      // A renderer listener throwing must not break the channel.
+      // Swallowed on purpose — see above.
     }
   }
-})
+}
+
+ipcRenderer.on('gateway:state-changed', (_e, state) => fanOut(gatewayStateListeners, state))
+ipcRenderer.on('win:maximize-changed', (_e, maximized) => fanOut(maximizeListeners, maximized))
 
 contextBridge.exposeInMainWorld('gw', {
   providers: {
@@ -59,5 +64,16 @@ contextBridge.exposeInMainWorld('gw', {
   shell: {
     openLog: () => ipcRenderer.invoke('shell:openLog'),
     openExternal: (url) => ipcRenderer.invoke('shell:openExternal', { url }),
+  },
+  /** Window buttons: the frame is drawn in the renderer, so these replace it. */
+  win: {
+    minimize: () => ipcRenderer.invoke('win:minimize'),
+    toggleMaximize: () => ipcRenderer.invoke('win:toggleMaximize'),
+    close: () => ipcRenderer.invoke('win:close'),
+    isMaximized: () => ipcRenderer.invoke('win:isMaximized'),
+    onMaximizeChange: (fn) => {
+      maximizeListeners.add(fn)
+      return () => maximizeListeners.delete(fn)
+    },
   },
 })

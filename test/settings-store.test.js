@@ -26,6 +26,7 @@ test('a missing settings file yields the defaults', () => {
   assert.equal(store.DEFAULTS.port, 8080)
   assert.equal(store.DEFAULTS.strategy, 'random')
   assert.equal(store.DEFAULTS.setupCompleted, false)
+  assert.equal(store.DEFAULTS.theme, 'system')
 })
 
 test('a corrupt settings file falls back to the defaults instead of throwing', () => {
@@ -34,18 +35,25 @@ test('a corrupt settings file falls back to the defaults instead of throwing', (
 })
 
 test('valid stored values are honored', () => {
-  const store = freshStore({ port: 9100, strategy: 'weighted', logLevel: 'debug', pollMs: 4000, setupCompleted: true })
+  const store = freshStore({
+    port: 9100, strategy: 'weighted', logLevel: 'debug', pollMs: 4000,
+    setupCompleted: true, theme: 'light',
+  })
   assert.deepEqual(store.get(), {
     port: 9100,
     strategy: 'weighted',
     logLevel: 'debug',
     pollMs: 4000,
     setupCompleted: true,
+    theme: 'light',
   })
 })
 
 test('out-of-range and unknown values fall back per field', () => {
-  const store = freshStore({ port: 0, strategy: 'sticky', logLevel: 'loud', pollMs: 500, setupCompleted: 'yes' })
+  const store = freshStore({
+    port: 0, strategy: 'sticky', logLevel: 'loud', pollMs: 500,
+    setupCompleted: 'yes', theme: 'sepia',
+  })
   const settings = store.get()
   assert.equal(settings.port, store.DEFAULTS.port)
   assert.equal(settings.strategy, store.DEFAULTS.strategy)
@@ -53,6 +61,13 @@ test('out-of-range and unknown values fall back per field', () => {
   // 2s floor: better-sqlite3 is synchronous and shares the gateway's event loop.
   assert.equal(settings.pollMs, store.DEFAULTS.pollMs)
   assert.equal(settings.setupCompleted, false)
+  assert.equal(settings.theme, store.DEFAULTS.theme)
+})
+
+test('every theme in THEMES round-trips', () => {
+  for (const theme of ['system', 'light', 'dark']) {
+    assert.equal(freshStore({ theme }).get().theme, theme)
+  }
 })
 
 test('port 65536 is rejected but 65535 is kept', () => {

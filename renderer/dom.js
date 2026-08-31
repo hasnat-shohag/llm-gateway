@@ -108,10 +108,12 @@ export function segmented(options, current, onPick, groupLabel) {
 
 const NOTICE_ICON = { info: 'info', bad: 'alert', good: 'check', warn: 'alert' }
 
-export function notice(kind, text, extra) {
+/** `action` is a trailing control — a dismiss button, a link out, a retry. */
+export function notice(kind, text, action) {
   return el('div', { class: `notice ${kind === 'warn' ? '' : kind}`.trim() }, [
     icon(NOTICE_ICON[kind] ?? 'info'),
-    el('div', { class: 'msg' }, [text, extra ?? null]),
+    el('div', { class: 'msg', text }),
+    action ?? null,
   ])
 }
 
@@ -179,16 +181,30 @@ export function modal({ title, body, actions, wide = false, onClose }) {
   const card = el('div', { class: `modal${wide ? ' wide' : ''}` }, [
     el('header', {}, [el('h2', { text: title })]),
     el('div', { class: 'modal-body' }, [].concat(body).filter(Boolean)),
-    el('div', { class: 'modal-actions' }, actions.map((a) => button({
-      label: a.label,
-      text: a.label,
-      kind: a.primary ? 'primary' : a.danger ? 'danger' : '',
-      disabled: a.disabled,
-      onClick: async () => {
-        if (a.keepOpen) await a.onClick?.({ close })
-        else { close(); await a.onClick?.({ close }) }
-      },
-    }))),
+    el('div', { class: 'modal-actions' }, actions.map((a) => {
+      const node = button({
+        label: a.label,
+        text: a.label,
+        kind: a.primary ? 'primary' : a.danger ? 'danger' : '',
+        disabled: a.disabled,
+        onClick: async () => {
+          if (!a.keepOpen) {
+            close()
+            await a.onClick?.({ close })
+            return
+          }
+          // The dialog stays open across an await, so the control that started the
+          // work has to say so — otherwise a slow save looks like a dead button.
+          node.classList.add('loading')
+          try {
+            await a.onClick?.({ close })
+          } finally {
+            node.classList.remove('loading')
+          }
+        },
+      })
+      return node
+    })),
   ])
 
   dialog.append(card)

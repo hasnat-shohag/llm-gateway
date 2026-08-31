@@ -38,23 +38,70 @@ function tooltip(value) {
   return node
 }
 
-function chartRoot(width, height, ariaLabel) {
+const GEOMETRY = { height: 200, padL: 58, padR: 12, padT: 14, padB: 24 }
+/** Below this the day labels collide no matter how few we draw. */
+const MIN_WIDTH = 320
+
+/**
+ * Charts draw at 1:1 with their container instead of scaling a fixed viewBox.
+ *
+ * A viewBox that gets scaled up also scales the tick text — a 10px label becomes
+ * 15px on a wide window and 7px on a narrow one, and the bar gaps drift with it.
+ * So each chart is returned as a host element that measures itself once it is in
+ * the document and draws at that exact pixel width, then redraws on resize. One
+ * shared ResizeObserver handles every chart on the page.
+ */
+const redraws = new WeakMap()
+const observer = new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    // The dashboard rebuilds its charts on every poll tick, and observe() holds a
+    // strong reference — so a discarded host would never be collected. Detaching
+    // an element fires an observation, which is where we drop it.
+    if (!entry.target.isConnected) {
+      observer.unobserve(entry.target)
+      redraws.delete(entry.target)
+      continue
+    }
+    const draw = redraws.get(entry.target)
+    if (draw) draw(Math.round(entry.contentRect.width))
+  }
+})
+
+function chartHost(draw) {
+  const host = document.createElement('div')
+  host.className = 'chart-host'
+
+  let lastWidth = 0
+  const paint = (width) => {
+    const w = Math.max(MIN_WIDTH, width)
+    if (w === lastWidth) return
+    lastWidth = w
+    while (host.firstChild) host.removeChild(host.firstChild)
+    host.append(draw(w))
+  }
+
+  redraws.set(host, paint)
+  observer.observe(host)
+  return host
+}
+
+function svgRoot(width, ariaLabel) {
+  const { height } = GEOMETRY
   const svg = svgEl('svg', {
     class: 'chart',
     viewBox: `0 0 ${width} ${height}`,
+    width,
+    height,
     role: 'img',
     'aria-label': ariaLabel,
   })
-  // Set through the CSSOM: an aspect-ratio keeps the fixed viewBox from either
-  // letterboxing or stretching the tick text.
-  svg.style.setProperty('aspect-ratio', `${width} / ${height}`)
   return svg
 }
 
-function emptyChart(width, height, message) {
-  const svg = chartRoot(width, height, message)
+function emptyChart(width, message) {
+  const svg = svgRoot(width, message)
   const node = svgEl('text', {
-    x: width / 2, y: height / 2, class: 'empty-label', 'text-anchor': 'middle',
+    x: width / 2, y: GEOMETRY.height / 2, class: 'empty-label', 'text-anchor': 'middle',
   })
   node.textContent = message
   svg.append(node)
@@ -85,11 +132,9 @@ export function zeroFillDays(rows, days) {
   return out
 }
 
-const GEOMETRY = { width: 720, height: 184, padL: 58, padR: 10, padT: 14, padB: 24 }
-
 /** Horizontal gridlines with y labels, plus the x axis. */
-function scaffold(svg, { max, format, gridlines = 4 }) {
-  const { width, padL, padR, padT, padB, height } = GEOMETRY
+function scaffold(svg, width, { max, format, gridlines = 4 }) {
+  const { padL, padR, padT, padB, height } = GEOMETRY
   const plotH = height - padT - padB
   const right = width - padR
 
@@ -98,18 +143,22 @@ function scaffold(svg, { max, format, gridlines = 4 }) {
     const value = max * (1 - i / gridlines)
     const isBase = i === gridlines
     svg.append(svgEl('line', { x1: padL, y1: y, x2: right, y2: y, class: isBase ? 'axis' : 'grid' }))
-    // Label the top, middle and baseline only — five numbers on a 184px chart is noise.
+    // Label the top, middle and baseline only — five numbers on a 200px chart is noise.
     if (i === 0 || i === gridlines || i * 2 === gridlines) {
       svg.append(label(padL - 8, y + 3.5, format(value), { 'text-anchor': 'end' }))
     }
   }
 }
 
+/** Thin the day labels to whatever the available width actually fits. */
 function xLabels(svg, rows, step) {
   const { padL, height } = GEOMETRY
-  const every = rows.length <= 10 ? 1 : Math.ceil(rows.length / 7)
+  const perLabel = 46
+  const every = Math.max(1, Math.ceil(perLabel / step))
   rows.forEach((row, i) => {
-    if (i % every !== 0 && i !== rows.length - 1) return
+    // Always keep the newest day: it is the one the reader is looking for.
+    const isLast = i === rows.length - 1
+    if (!isLast && (rows.length - 1 - i) % every !== 0) return
     const x = padL + i * step + step / 2
     svg.append(label(x, height - 7, row.date.slice(5), { 'text-anchor': 'middle' }))
   })
@@ -120,37 +169,39 @@ function xLabels(svg, rows, step) {
  * `rows` = [{ date, value }]. `format` renders the axis labels and tooltips.
  */
 export function barChart(rows, { format = (v) => String(v), color } = {}) {
-  const { width, height, padL, padR, padT, padB } = GEOMETRY
-  if (!rows.length) return emptyChart(width, height, 'no data yet')
+  return chartHost((width) => {
+    const { height, padL, padR, padT, padB } = GEOMETRY
+    if (!rows.length) return emptyChart(width, 'no data yet')
 
-  const total = rows.reduce((sum, r) => sum + (r.value ?? 0), 0)
-  const svg = chartRoot(width, height,
-    `Bar chart over ${rows.length} days, ${format(total)} total, peak ${format(Math.max(...rows.map((r) => r.value)))}`)
+    const total = rows.reduce((sum, r) => sum + (r.value ?? 0), 0)
+    const peak = Math.max(...rows.map((r) => r.value))
+    const svg = svgRoot(width,
+      `Bar chart over ${rows.length} days. ${format(total)} in total, ${format(peak)} on the busiest day.`)
 
-  const plotW = width - padL - padR
-  const plotH = height - padT - padB
-  const max = niceMax(Math.max(...rows.map((r) => r.value), 0))
-  const scale = plotH / max
-  const step = plotW / rows.length
-  const barW = Math.max(2, Math.min(step - 4, 30))
-  const fill = color ?? seriesColor(0)
+    const plotW = width - padL - padR
+    const plotH = height - padT - padB
+    const max = niceMax(peak)
+    const scale = plotH / max
+    const step = plotW / rows.length
+    const barW = Math.max(2, Math.min(step - 5, 34))
+    const fill = color ?? seriesColor(0)
 
-  scaffold(svg, { max, format })
+    scaffold(svg, width, { max, format })
 
-  rows.forEach((row, i) => {
-    const h = row.value > 0 ? Math.max(2, row.value * scale) : 0
-    const x = padL + i * step + (step - barW) / 2
-    if (h > 0) {
+    rows.forEach((row, i) => {
+      if (!(row.value > 0)) return
+      const h = Math.max(2, row.value * scale)
+      const x = padL + i * step + (step - barW) / 2
       const rect = svgEl('rect', {
         class: 'bar', x, y: padT + plotH - h, width: barW, height: h, fill, rx: 2,
       })
       rect.append(tooltip(`${row.date} · ${format(row.value)}`))
       svg.append(rect)
-    }
-  })
+    })
 
-  xLabels(svg, rows, step, barW)
-  return svg
+    xLabels(svg, rows, step)
+    return svg
+  })
 }
 
 /**
@@ -158,38 +209,40 @@ export function barChart(rows, { format = (v) => String(v), color } = {}) {
  * `rows` = [{ date, parts: { [seriesName]: number } }], `series` = ordered names.
  */
 export function stackedBarChart(rows, series, { format = (v) => String(v) } = {}) {
-  const { width, height, padL, padR, padT, padB } = GEOMETRY
-  if (!rows.length || !series.length) return emptyChart(width, height, 'no per-provider data yet')
+  return chartHost((width) => {
+    const { height, padL, padR, padT, padB } = GEOMETRY
+    if (!rows.length || !series.length) return emptyChart(width, 'no per-provider data yet')
 
-  const totals = rows.map((r) => series.reduce((sum, s) => sum + (r.parts[s] ?? 0), 0))
-  const svg = chartRoot(width, height,
-    `Stacked bar chart of ${series.length} providers over ${rows.length} days, peak ${format(Math.max(...totals))} in a day`)
+    const totals = rows.map((r) => series.reduce((sum, s) => sum + (r.parts[s] ?? 0), 0))
+    const svg = svgRoot(width,
+      `Stacked bar chart of ${series.length} providers over ${rows.length} days, peak ${format(Math.max(...totals))} in a day.`)
 
-  const plotW = width - padL - padR
-  const plotH = height - padT - padB
-  const max = niceMax(Math.max(...totals, 0))
-  const scale = plotH / max
-  const step = plotW / rows.length
-  const barW = Math.max(2, Math.min(step - 4, 30))
+    const plotW = width - padL - padR
+    const plotH = height - padT - padB
+    const max = niceMax(Math.max(...totals, 0))
+    const scale = plotH / max
+    const step = plotW / rows.length
+    const barW = Math.max(2, Math.min(step - 5, 34))
 
-  scaffold(svg, { max, format })
+    scaffold(svg, width, { max, format })
 
-  rows.forEach((row, i) => {
-    const x = padL + i * step + (step - barW) / 2
-    let cursorY = padT + plotH
-    series.forEach((name, si) => {
-      const value = row.parts[name] ?? 0
-      if (value <= 0) return
-      const h = Math.max(2, value * scale)
-      cursorY -= h
-      const rect = svgEl('rect', {
-        class: 'bar', x, y: cursorY, width: barW, height: h, fill: seriesColor(si),
+    rows.forEach((row, i) => {
+      const x = padL + i * step + (step - barW) / 2
+      let cursorY = padT + plotH
+      series.forEach((name, si) => {
+        const value = row.parts[name] ?? 0
+        if (value <= 0) return
+        const h = Math.max(2, value * scale)
+        cursorY -= h
+        const rect = svgEl('rect', {
+          class: 'bar', x, y: cursorY, width: barW, height: h, fill: seriesColor(si),
+        })
+        rect.append(tooltip(`${row.date} · ${name} · ${format(value)}`))
+        svg.append(rect)
       })
-      rect.append(tooltip(`${row.date} · ${name} · ${format(value)}`))
-      svg.append(rect)
     })
-  })
 
-  xLabels(svg, rows, step, barW)
-  return svg
+    xLabels(svg, rows, step)
+    return svg
+  })
 }

@@ -14,6 +14,7 @@ const claudeSettings = require('./claude-settings.js')
 const claudeAccount = require('./claude-account.js')
 const probe = require('./provider-probe.js')
 const autostart = require('./autostart.js')
+const theme = require('./theme.js')
 const paths = require('./paths.js')
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -131,6 +132,7 @@ function register() {
     ...settingsStore.get(),
     strategies: settingsStore.STRATEGIES,
     logLevels: settingsStore.LOG_LEVELS,
+    themes: settingsStore.THEMES,
     gatewayUrl: gatewayClient.baseUrl(),
     providersPath: paths.providersPath(),
     logPath: paths.gatewayLogPath(),
@@ -148,6 +150,10 @@ function register() {
       if (!settingsStore.LOG_LEVELS.includes(payload.logLevel)) return { ok: false, error: 'unknown log level' }
       patch.logLevel = payload.logLevel
     }
+    if (payload.theme !== undefined) {
+      if (!settingsStore.THEMES.includes(payload.theme)) return { ok: false, error: 'unknown theme' }
+      patch.theme = payload.theme
+    }
     if (payload.pollMs !== undefined) {
       const pollMs = Number(payload.pollMs)
       if (!Number.isFinite(pollMs) || pollMs < 2000) return { ok: false, error: 'pollMs must be at least 2000' }
@@ -156,6 +162,9 @@ function register() {
     if (payload.setupCompleted !== undefined) patch.setupCompleted = Boolean(payload.setupCompleted)
 
     const next = settingsStore.update(patch)
+    // A theme change is a main-process concern: it sets nativeTheme.themeSource,
+    // which is what the renderer's prefers-color-scheme rules resolve against.
+    if (patch.theme !== undefined) theme.apply(next.theme)
     // strategy and logLevel are read from env at fork time, so they only take
     // effect after the gateway process is replaced.
     const needsRestart = patch.strategy !== undefined || patch.logLevel !== undefined
@@ -173,6 +182,35 @@ function register() {
   ipcMain.handle('claude:plan', async (_e, payload) => claudeSettings.plan(Boolean(payload?.route)))
 
   ipcMain.handle('claude:apply', async (_e, payload) => claudeSettings.apply(Boolean(payload?.route)))
+
+  // --- window controls ------------------------------------------------------
+  // The window is frameless, so the renderer draws the buttons and these are the
+  // only way to act on them. `senderFrame` is not consulted: every one of these
+  // is scoped to the window that sent it, so a compromised renderer can only ever
+  // minimize, maximize or hide its own window.
+  const senderWindow = (event) => BrowserWindow.fromWebContents(event.sender)
+
+  ipcMain.handle('win:minimize', async (event) => {
+    senderWindow(event)?.minimize()
+    return { ok: true }
+  })
+
+  ipcMain.handle('win:toggleMaximize', async (event) => {
+    const win = senderWindow(event)
+    if (!win) return { ok: false, error: 'no window' }
+    if (win.isMaximized()) win.unmaximize()
+    else win.maximize()
+    return { ok: true, maximized: win.isMaximized() }
+  })
+
+  // Close means hide-to-tray, exactly as the OS button did: the supervisor keeps
+  // the gateway running and only an explicit Quit from the tray exits.
+  ipcMain.handle('win:close', async (event) => {
+    senderWindow(event)?.close()
+    return { ok: true }
+  })
+
+  ipcMain.handle('win:isMaximized', async (event) => senderWindow(event)?.isMaximized() ?? false)
 
   // --- misc -----------------------------------------------------------------
   ipcMain.handle('shell:openLog', async () => {

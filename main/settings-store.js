@@ -18,10 +18,17 @@ const DEFAULTS = {
   pollMs: 5000,
   /** Whether the first-run wizard has been dismissed. */
   setupCompleted: false,
+  /**
+   * Appearance. Applied by setting Electron's `nativeTheme.themeSource`, which is
+   * what `prefers-color-scheme` resolves against in the renderer — so the CSS
+   * needs no second selector and the renderer never reads this value.
+   */
+  theme: 'system',
 }
 
 const STRATEGIES = ['random', 'round-robin', 'weighted']
 const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal']
+const THEMES = ['system', 'light', 'dark']
 
 let cache = null
 
@@ -33,6 +40,7 @@ function coerce(raw) {
   if (Number.isInteger(port) && port > 0 && port < 65536) out.port = port
   if (STRATEGIES.includes(raw.strategy)) out.strategy = raw.strategy
   if (LOG_LEVELS.includes(raw.logLevel)) out.logLevel = raw.logLevel
+  if (THEMES.includes(raw.theme)) out.theme = raw.theme
 
   const pollMs = Number(raw.pollMs)
   // Floor of 2s: better-sqlite3 is synchronous and shares the gateway's event
@@ -61,4 +69,4 @@ function update(patch) {
   return { ...next }
 }
 
-module.exports = { get, update, DEFAULTS, STRATEGIES, LOG_LEVELS }
+module.exports = { get, update, DEFAULTS, STRATEGIES, LOG_LEVELS, THEMES }

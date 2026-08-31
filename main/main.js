@@ -9,6 +9,7 @@ const supervisor = require('./supervisor.js')
 const gatewayClient = require('./gateway-client.js')
 const claudeSettings = require('./claude-settings.js')
 const settingsStore = require('./settings-store.js')
+const theme = require('./theme.js')
 const ipc = require('./ipc.js')
 const paths = require('./paths.js')
 
@@ -79,7 +80,12 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    backgroundColor: '#12141a',
+    // The titlebar is drawn in the renderer (renderer/index.html's .titlebar), so
+    // the section nav, the gateway status and the window buttons share one 44px
+    // strip instead of stacking an OS titlebar on top of an app one. The drag
+    // region is CSS: -webkit-app-region: drag.
+    frame: false,
+    backgroundColor: theme.backgroundColor(),
     title: 'LLM Gateway',
     webPreferences: {
       preload: join(__dirname, '..', 'preload', 'preload.js'),
@@ -93,6 +99,15 @@ function createWindow() {
 
   mainWindow.loadURL(APP_INDEX)
   mainWindow.once('ready-to-show', () => mainWindow.show())
+
+  // Without a frame there is no OS button to reflect, so the renderer's own
+  // maximize button has to be told when the state changes by any other route
+  // (a keyboard shortcut, a window-manager gesture, snapping).
+  const sendMaximized = () => {
+    mainWindow?.webContents.send('win:maximize-changed', mainWindow.isMaximized())
+  }
+  mainWindow.on('maximize', sendMaximized)
+  mainWindow.on('unmaximize', sendMaximized)
 
   // Nothing in this app should ever open a second window or navigate away.
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -212,6 +227,8 @@ app.on('window-all-closed', () => {})
 app.whenReady().then(async () => {
   registerAppProtocol()
   paths.ensureProvidersFile()
+  // Before the window exists: themeSource decides its backgroundColor.
+  theme.apply()
   ipc.register()
 
   supervisor.onStateChange((state) => {
@@ -220,6 +237,7 @@ app.whenReady().then(async () => {
   })
 
   createWindow()
+  theme.follow(() => mainWindow)
 
   tray = new Tray(trayIcon())
   refreshTray()

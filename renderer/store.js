@@ -20,6 +20,7 @@ export const state = {
   usage: null,
   claude: null,
   settings: null,
+  /** False until the first providers + settings read lands, so views can skeleton. */
   loaded: false,
 }
 
@@ -72,6 +73,16 @@ export async function reloadUsage(limit = 50) {
   return res
 }
 
+/**
+ * True while the user has not finished (or dismissed) first-run setup. The
+ * onboarding view owns the whole content area in that case, so this must not
+ * depend on data that arrives later than the first paint.
+ */
+export function needsOnboarding() {
+  if (!state.settings) return false
+  return state.settings.setupCompleted !== true
+}
+
 let timer = null
 
 async function tick() {
@@ -79,15 +90,24 @@ async function tick() {
   emit()
 }
 
+// Registered once, not per startPolling() call: a pollMs change restarts the timer,
+// and re-adding the listener there would stack a duplicate on every save.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) tick()
+})
+
 export function startPolling(intervalMs) {
   stopPolling()
+  // Poll immediately. The interval alone would leave every gateway-derived cell
+  // showing a skeleton for a full interval after boot, even though the numbers are
+  // one IPC round-trip away.
+  tick()
   timer = setInterval(() => {
+    // An occluded or minimized window still runs its timers; there is nothing to
+    // repaint for, and the gateway is the thing being spared the queries.
     if (document.hidden) return
     tick()
   }, intervalMs)
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) tick()
-  })
 }
 
 export function stopPolling() {
@@ -102,4 +122,13 @@ export function watchGatewayState() {
     // A status change usually means the numbers moved too.
     tick()
   })
+}
+
+/**
+ * Repaint on an OS theme change. Chart series colors are resolved from CSS tokens
+ * at draw time, so an already-rendered SVG keeps the old palette until something
+ * re-renders it.
+ */
+export function watchTheme() {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', emit)
 }
