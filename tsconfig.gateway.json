@@ -1,12 +1,10 @@
 {
-  "extends": "../tsconfig.json",
+  "//": "The only build config. `npm run build:gateway` compiles gateway-src/*.ts into build/gateway/, which scripts/finalize-gateway-build.js then marks as ESM.",
+  "extends": "./tsconfig.json",
   "compilerOptions": {
-    "rootDir": "../src",
-    "outDir": "build/gateway",
-    "declaration": false,
-    "declarationMap": false,
-    "sourceMap": true
+    "rootDir": "gateway-src",
+    "outDir": "build/gateway"
   },
-  "include": ["../src/**/*.ts"],
-  "exclude": ["../src/**/*.test.ts"]
+  "include": ["gateway-src/**/*.ts"],
+  "exclude": ["gateway-src/**/*.test.ts"]
 }

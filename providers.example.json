@@ -1,0 +1,27 @@
+[
+  {
+    "name": "My Provider",
+    "baseUrl": "https://your-provider.com",
+    "apiKey": "sk-xxxxx",
+    "enabled": true,
+    "weight": 1,
+    "authStyle": "x-api-key"
+  },
+  {
+    "name": "Bearer Auth Provider",
+    "baseUrl": "https://another-provider.com",
+    "apiKey": "sk-yyyyy",
+    "enabled": true,
+    "weight": 2,
+    "authStyle": "bearer",
+    "sanitize": false
+  },
+  {
+    "name": "Claude Official",
+    "baseUrl": "https://api.anthropic.com",
+    "enabled": false,
+    "weight": 1,
+    "authStyle": "passthrough",
+    "sanitize": false
+  }
+]

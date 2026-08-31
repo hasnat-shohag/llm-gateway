@@ -1,0 +1,23 @@
+{
+  "//": "Base compiler options for the vendored gateway source in gateway-src/. Kept in step with the upstream gateway repo's tsconfig.json (ESM, bundler resolution, verbatimModuleSyntax) so the same .ts files compile identically here. Only tsconfig.gateway.json is ever built; this file exists to be extended.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "outDir": "build/gateway",
+    "rootDir": "gateway-src",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "verbatimModuleSyntax": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": true
+  },
+  "include": ["gateway-src"],
+  "exclude": ["node_modules", "build", "release"]
+}

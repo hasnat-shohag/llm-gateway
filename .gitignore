@@ -2,3 +2,14 @@ node_modules/
 build/
 release/
 *.log
+
+# A providers.json at the repo root is only ever a seed for first run (paths.js
+# migrates it into userData), but it holds real API keys either way.
+providers.json
+.env
+
+# The app keeps its database under userData; these only appear if the gateway is
+# run straight out of this directory.
+usage.db
+usage.db-wal
+usage.db-shm

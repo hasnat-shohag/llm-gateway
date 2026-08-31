@@ -10,6 +10,7 @@
   "main": "main/main.js",
   "scripts": {
     "build:gateway": "tsc -p tsconfig.gateway.json && node scripts/finalize-gateway-build.js",
+    "typecheck": "tsc -p tsconfig.gateway.json --noEmit",
     "gen:icon": "node scripts/generate-icon.js",
     "start": "npm run build:gateway && electron . --ozone-platform=x11",
     "dist": "npm run build:gateway && electron-builder",
@@ -28,6 +29,8 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.20.1",
     "electron": "42.10.1",
     "electron-builder": "^26.0.12",
     "typescript": "^5.7.3"

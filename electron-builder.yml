@@ -27,9 +27,9 @@ asarUnpack:
 
 npmRebuild: true
 # Left false so `better-sqlite3` uses its published Electron prebuild — which is
-# the reason Electron is pinned to 43 (ABI 148), the newest ABI it ships a binary
-# for. Set this to true only if you must build from source, and note that it then
-# requires python3 + make + g++ on the build host.
+# the reason Electron is pinned to 42.10.1 (ABI 146), the newest ABI it ships a
+# binary for. Set this to true only if you must build from source, and note that it
+# then requires python3 + make + g++ on the build host.
 buildDependenciesFromSource: false
 
 linux:
