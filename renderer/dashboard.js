@@ -232,7 +232,7 @@ function callsPanel() {
     title: 'Recent calls',
     subtitle: pending() ? undefined : `${calls.length} most recent`,
     flush: true,
-    body: el('div', { class: 'table-scroll' }, [
+    body: el('div', { class: 'table-scroll', 'data-scroll-key': 'recent-calls' }, [
       el('table', {}, [
         el('thead', {}, [el('tr', {}, [
           el('th', { scope: 'col', text: 'When (UTC)' }),

@@ -36,11 +36,44 @@ export function clear(node) {
   while (node.firstChild) node.removeChild(node.firstChild)
 }
 
+/**
+ * Scroll offsets do not survive a rebuild, and every view rebuilds its whole
+ * subtree — on each poll tick and after every write. Two offsets are lost:
+ * `#main`'s, because emptying its content collapses the scroll height and the
+ * browser clamps scrollTop to 0; and each inner scroll host's, because the
+ * element itself is discarded. Hosts are matched by `data-scroll-key` rather
+ * than by identity or position, so a row count that changed between renders
+ * still lines up.
+ */
+function scrollSnapshot(node) {
+  const hosts = new Map()
+  for (const host of node.querySelectorAll('[data-scroll-key]')) {
+    hosts.set(host.dataset.scrollKey, { top: host.scrollTop, left: host.scrollLeft })
+  }
+  const main = node.closest('#main')
+  return { hosts, main, mainTop: main ? main.scrollTop : 0 }
+}
+
+function scrollRestore(node, snap) {
+  if (snap.main && snap.mainTop) snap.main.scrollTop = snap.mainTop
+  if (snap.hosts.size === 0) return
+  for (const host of node.querySelectorAll('[data-scroll-key]')) {
+    const prev = snap.hosts.get(host.dataset.scrollKey)
+    if (!prev) continue
+    host.scrollTop = prev.top
+    host.scrollLeft = prev.left
+  }
+}
+
 export function replace(node, children) {
+  const snap = scrollSnapshot(node)
   clear(node)
   for (const child of [].concat(children)) {
     if (child) node.append(child)
   }
+  // Assigning scrollTop forces the layout the restore depends on, so this has to
+  // happen here and not in a later frame — a rAF would repaint at 0 first.
+  scrollRestore(node, snap)
 }
 
 /* -------------------------------------------------------------- primitives */

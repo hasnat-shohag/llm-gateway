@@ -421,7 +421,7 @@ function providerTable() {
     ? state.providers.map((p, i) => providerRow(p, i))
     : skeletonRows(['short', 'text', 'tag', 'tag', 'short', 'text', 'short', 'short'], 3)
 
-  return el('div', { class: 'table-scroll' }, [el('table', {}, [head, el('tbody', {}, body)])])
+  return el('div', { class: 'table-scroll', 'data-scroll-key': 'providers' }, [el('table', {}, [head, el('tbody', {}, body)])])
 }
 
 /* ------------------------------------------------------------------ panels */
