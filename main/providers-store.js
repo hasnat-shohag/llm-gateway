@@ -183,4 +183,31 @@ function rawProvider(name) {
   return snapshot.providers.find((p) => p.name === name) ?? null
 }
 
-module.exports = { read, write, rawProvider, toPublic, maskKey, UNCHANGED, MASK_CHAR }
+/**
+ * Is any enabled provider a `passthrough` one?
+ *
+ * Read straight off disk and synchronously, because `claude-settings.js` needs the
+ * answer inside `plan()` / `status()` and the snapshot may be empty if the renderer
+ * has not asked for the list yet. Deliberately skips zod: only two fields matter
+ * and a file the gateway would reject still tells us the user's intent.
+ *
+ * A missing file means no providers, so no passthrough. An unparseable one means we
+ * cannot tell, and the safe answer there is `true` — see `claude-settings.js`, where
+ * a false negative would overwrite a working subscription credential.
+ */
+function hasEnabledPassthrough() {
+  const path = providersPath()
+  let parsed
+  try {
+    parsed = JSON.parse(readFileSync(path, 'utf-8'))
+  } catch (err) {
+    return err.code !== 'ENOENT'
+  }
+  if (!Array.isArray(parsed)) return true
+  return parsed.some((p) =>
+    p && typeof p === 'object' && p.authStyle === 'passthrough' && p.enabled !== false)
+}
+
+module.exports = {
+  read, write, rawProvider, toPublic, maskKey, hasEnabledPassthrough, UNCHANGED, MASK_CHAR,
+}

@@ -69,7 +69,13 @@ async function save(providers, { onDone } = {}) {
   if (res.ok) {
     state.providers = res.providers
     state.providersVersion = res.version
-    setBanner('Saved. The running gateway picked it up without a restart.', 'good')
+    if (res.wiring) state.claude = res.wiring
+    // A passthrough provider going on or off flips whether the placeholder
+    // credential belongs in settings.json, so main rewrote it — say so, because
+    // Claude Code only reads that file at startup.
+    setBanner(res.rewired
+      ? 'Saved. ~/.claude/settings.json was updated to match, so restart Claude Code to pick it up.'
+      : 'Saved. The running gateway picked it up without a restart.', 'good')
   } else if (res.conflict) {
     setBanner(`${res.error}. Reload to see the current file.`, 'bad')
   } else {

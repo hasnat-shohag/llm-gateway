@@ -10,7 +10,7 @@ const stub = require('./helpers/electron-stub.js').install()
 
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { readFileSync, writeFileSync, existsSync, statSync, utimesSync } = require('node:fs')
+const { readFileSync, writeFileSync, existsSync, statSync, utimesSync, rmSync } = require('node:fs')
 
 const paths = require('../main/paths.js')
 const store = require('../main/providers-store.js')
@@ -228,6 +228,30 @@ test('maskKey never leaks a short key', () => {
   assert.equal(store.maskKey('short'), '••••')
   assert.equal(store.maskKey(''), '••••')
   assert.equal(store.maskKey(undefined), '••••')
+})
+
+test('hasEnabledPassthrough reads the file, not the snapshot', () => {
+  seed() // SEED's 'official' entry is passthrough and enabled
+  assert.equal(store.hasEnabledPassthrough(), true)
+
+  seed(SEED.map((p) => (p.authStyle === 'passthrough' ? { ...p, enabled: false } : p)))
+  assert.equal(store.hasEnabledPassthrough(), false)
+
+  seed(SEED.filter((p) => p.authStyle !== 'passthrough'))
+  assert.equal(store.hasEnabledPassthrough(), false)
+})
+
+test('hasEnabledPassthrough answers true when it cannot tell, and false when there is no file', () => {
+  // Unknown has to read as "yes": claude-settings.js would otherwise overwrite a
+  // live subscription credential with a placeholder.
+  writeFileSync(paths.providersPath(), '{ broken')
+  assert.equal(store.hasEnabledPassthrough(), true)
+
+  writeFileSync(paths.providersPath(), '{"not":"an array"}')
+  assert.equal(store.hasEnabledPassthrough(), true)
+
+  rmSync(paths.providersPath(), { force: true })
+  assert.equal(store.hasEnabledPassthrough(), false)
 })
 
 test('the temp sandbox is what was used, not the real userData', () => {

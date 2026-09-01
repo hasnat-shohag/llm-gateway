@@ -33,9 +33,25 @@ function login(exists) {
   else rmSync(CREDENTIALS(), { force: true })
 }
 
+/**
+ * Seed the sandbox providers.json. `plan()` consults it to decide whether the
+ * subscription is the credential in play, and a placeholder would break that.
+ */
+function providers(value) {
+  const path = paths.providersPath() // creates userData/ as a side effect
+  if (value === null) rmSync(path, { force: true })
+  else writeFileSync(path, typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`)
+}
+
+const PASSTHROUGH = (enabled) => [
+  { name: 'other', baseUrl: 'https://other.example.com', apiKey: 'sk-x', enabled: true, weight: 1 },
+  { name: 'Claude Official', baseUrl: 'https://api.anthropic.com', enabled, weight: 1, authStyle: 'passthrough' },
+]
+
 beforeEach(() => {
   rmSync(CLAUDE_DIR, { recursive: true, force: true })
   mkdirSync(CLAUDE_DIR, { recursive: true })
+  providers(null)
 })
 
 test('paths resolve inside the sandbox, not the real ~/.claude', () => {
@@ -82,8 +98,9 @@ test('plan(true) with no login adds the base URL and a placeholder token', () =>
   assert.ok(planned.warnings.some((w) => /placeholder/i.test(w)))
 })
 
-test('plan(true) with a login never writes a credential', () => {
+test('plan(true) with a login and an enabled passthrough provider writes no credential', () => {
   login(true)
+  providers(PASSTHROUGH(true))
   const planned = claudeSettings.plan(true)
   assert.equal(planned.ok, true)
   assert.equal(planned.after.ANTHROPIC_BASE_URL, GATEWAY_URL)
@@ -92,8 +109,49 @@ test('plan(true) with a login never writes a credential', () => {
   assert.equal('ANTHROPIC_API_KEY' in planned.after, false)
 })
 
+test('plan(true) with a login but the passthrough provider disabled still writes the placeholder', () => {
+  login(true)
+  providers(PASSTHROUGH(false))
+  const planned = claudeSettings.plan(true)
+  // Nothing is relaying the subscription, so withholding a credential would only
+  // make Claude Code prompt for a login on every new session.
+  assert.equal(planned.after.ANTHROPIC_AUTH_TOKEN, claudeSettings.PLACEHOLDER_TOKEN)
+  assert.ok(planned.warnings.some((w) => /no enabled passthrough provider/i.test(w)))
+})
+
+test('plan(true) with a login and no passthrough provider at all writes the placeholder', () => {
+  login(true)
+  providers([{ name: 'other', baseUrl: 'https://other.example.com', apiKey: 'sk-x', enabled: true, weight: 1 }])
+  assert.equal(claudeSettings.plan(true).after.ANTHROPIC_AUTH_TOKEN, claudeSettings.PLACEHOLDER_TOKEN)
+})
+
+test('plan(true) writes no credential when providers.json cannot be parsed', () => {
+  login(true)
+  providers('{ broken')
+  // Unknown beats wrong: a placeholder would replace a live subscription credential.
+  assert.equal('ANTHROPIC_AUTH_TOKEN' in claudeSettings.plan(true).after, false)
+})
+
+test('status reports whether the subscription is the credential in play', () => {
+  login(true)
+  providers(PASSTHROUGH(true))
+  let s = claudeSettings.status()
+  assert.equal(s.passthroughEnabled, true)
+  assert.equal(s.subscriptionInUse, true)
+
+  providers(PASSTHROUGH(false))
+  s = claudeSettings.status()
+  assert.equal(s.passthroughEnabled, false)
+  assert.equal(s.subscriptionInUse, false)
+
+  login(false)
+  providers(PASSTHROUGH(true))
+  assert.equal(claudeSettings.status().subscriptionInUse, false)
+})
+
 test('plan(true) with a login removes a placeholder we previously wrote', () => {
   login(true)
+  providers(PASSTHROUGH(true))
   writeSettings({ env: { ANTHROPIC_BASE_URL: GATEWAY_URL, ANTHROPIC_AUTH_TOKEN: claudeSettings.PLACEHOLDER_TOKEN } })
 
   const planned = claudeSettings.plan(true)
@@ -105,11 +163,23 @@ test('plan(true) with a login removes a placeholder we previously wrote', () => 
 
 test('plan(true) with a login warns about a hand-set token but keeps it', () => {
   login(true)
+  providers(PASSTHROUGH(true))
   writeSettings({ env: { ANTHROPIC_AUTH_TOKEN: 'sk-ant-user-supplied' } })
 
   const planned = claudeSettings.plan(true)
   assert.equal(planned.after.ANTHROPIC_AUTH_TOKEN, 'sk-ant-user-supplied')
   assert.ok(planned.warnings.some((w) => /overrides your Claude subscription/.test(w)))
+})
+
+test('plan(true) leaves a hand-set key alone when no passthrough provider needs it gone', () => {
+  login(true)
+  providers(PASSTHROUGH(false))
+  writeSettings({ env: { ANTHROPIC_API_KEY: 'dummy' } })
+
+  const planned = claudeSettings.plan(true)
+  assert.equal(planned.after.ANTHROPIC_API_KEY, 'dummy')
+  assert.equal('ANTHROPIC_AUTH_TOKEN' in planned.after, false)
+  assert.ok(planned.warnings.some((w) => /leaving it as it is/.test(w)))
 })
 
 test('plan(true) warns before replacing a foreign base URL', () => {

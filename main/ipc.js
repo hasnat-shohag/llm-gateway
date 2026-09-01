@@ -56,8 +56,23 @@ function register() {
     const shapeError = checkIncomingProviders(providers)
     if (shapeError) return { ok: false, error: shapeError, issues: [] }
     const result = await providersStore.write(providers, { ifMatch: payload?.version })
-    if (result.ok) gatewayClient.invalidateCache()
-    return result
+    if (!result.ok) return result
+
+    gatewayClient.invalidateCache()
+    // Enabling or disabling a passthrough provider changes whether the placeholder
+    // credential belongs in ~/.claude/settings.json: it has to be there for Claude
+    // Code to use the gateway at all, and absent for the subscription to survive.
+    // apply() is a no-op when the plan holds no changes, so this only writes when
+    // this save actually flipped that.
+    let wiring = claudeSettings.status()
+    if (wiring.routed) {
+      const rewired = claudeSettings.apply(true)
+      if (rewired.ok && rewired.changed) {
+        return { ...result, rewired: { changes: rewired.changes, backupPath: rewired.backupPath }, wiring: rewired.status }
+      }
+      if (rewired.ok) wiring = rewired.status
+    }
+    return { ...result, wiring }
   })
 
   ipcMain.handle('providers:probe', async (_e, payload) => {

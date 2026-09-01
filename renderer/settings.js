@@ -95,7 +95,9 @@ function claudePanel() {
 
   const account = claude.account ?? {}
   const accountLine = account.loggedIn === true
-    ? 'A Claude Code login was detected, so your subscription can be used through the gateway with a passthrough provider.'
+    ? claude.passthroughEnabled
+      ? 'A Claude Code login was detected and a passthrough provider is enabled, so no gateway credential is written — that absence is what keeps your subscription active.'
+      : 'A Claude Code login was detected, but no passthrough provider is enabled, so a placeholder credential is written. Enable the passthrough provider to route your subscription through the gateway instead.'
     : account.loggedIn === null
       ? 'Login state is stored in the macOS Keychain and cannot be checked from here.'
       : 'No Claude Code login detected. The gateway will use your configured provider keys only.'
@@ -114,7 +116,9 @@ function claudePanel() {
   if (claude.foreignBaseUrl) {
     body.push(notice('warn', `ANTHROPIC_BASE_URL points at ${claude.baseUrl}, which this app did not set. Turning routing on will replace it.`))
   }
-  if (claude.routed && (claude.hasAuthToken || claude.hasApiKey) && !claude.authTokenIsOurs) {
+  // Only a problem when the subscription is what the gateway relays; otherwise a
+  // credential here is exactly what stops Claude Code prompting for a login.
+  if (claude.routed && claude.subscriptionInUse && (claude.hasAuthToken || claude.hasApiKey) && !claude.authTokenIsOurs) {
     body.push(notice('warn',
       'A gateway credential is set in settings.json, which overrides your Claude subscription. Remove ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY if you want the passthrough provider to use your plan.'))
   }
