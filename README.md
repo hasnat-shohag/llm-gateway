@@ -25,12 +25,26 @@ commit and the refresh procedure.
 If you have an active Claude Code login, a `passthrough` provider relays it, so the gateway can sit
 in front of your existing subscription rather than replacing it.
 
+## Install
+
+```bash
+curl -fsSL https://hasnat-shohag.github.io/llm-gateway/install.sh | sh
+```
+
+That adds the APT repository and installs the package. To do it by hand instead — or to see exactly
+what the script does — the steps are on the
+[repository page](https://hasnat-shohag.github.io/llm-gateway). Updates then arrive through
+`apt upgrade` like anything else.
+
+For other architectures or non-Debian distributions, every release also ships an AppImage on the
+[releases page](https://github.com/hasnat-shohag/llm-gateway/releases).
+
 ## Requirements
 
 - Linux (X11 or XWayland). Only Linux targets are packaged; the Wayland backend is not used.
 - Node.js 22 or newer.
-- `binutils` on the build host if you want to build the `.deb` (fpm shells out to `ar`). The
-  AppImage builds without it.
+- `binutils` and `fakeroot` on the build host if you want to build the `.deb`. The AppImage builds
+  without them.
 
 ## Build and run from source
 

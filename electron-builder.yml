@@ -60,6 +60,15 @@ linux:
       Categories: Development;Utility;
 
 deb:
+  # The deb's `Package:` field — what `apt install <name>` resolves against.
+  # electron-builder otherwise derives it from package.json `name`
+  # (appInfo.linuxPackageName), which is `llm-gateway-desktop`, and `name` cannot be
+  # changed because Electron derives the userData directory from it. FpmTarget prefers
+  # this option when set, so the two can differ.
+  packageName: llm-gateway
+  # Keep the filename in step with the package name; the default is built from
+  # package.json `name` and there is no ${packageName} macro.
+  artifactName: llm-gateway_${version}_${arch}.${ext}
   depends:
     - libgtk-3-0
     - libnotify4

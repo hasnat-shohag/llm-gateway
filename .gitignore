@@ -3,6 +3,10 @@ build/
 release/
 *.log
 
+# Scratch APT repository. The published one lives on the gh-pages branch; this is only
+# ever a local build target for scripts/build-apt-repo.sh.
+apt-repo/
+
 # A providers.json at the repo root is only ever a seed for first run (paths.js
 # migrates it into userData), but it holds real API keys either way.
 providers.json

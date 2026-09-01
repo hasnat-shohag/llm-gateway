@@ -1,0 +1,112 @@
+name: release
+
+# Publishing is driven by a tag, so the released artifacts and the APT repository are
+# always built from one immutable commit. Pushing v0.1.1 both attaches binaries to the
+# GitHub release and updates the repository apt clients poll.
+on:
+  push:
+    tags: ['v*']
+  # Manual runs build and validate everything, but publish nothing. Useful for
+  # confirming a packaging change before committing to a tag.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # fpm shells out to `ar` (binutils) and needs fakeroot to stage file ownership.
+      # apt-utils supplies apt-ftparchive. None ship on the runner by default.
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils fakeroot apt-utils
+
+      # postinstall runs electron-builder install-app-deps, which rebuilds
+      # better-sqlite3 against Electron's ABI.
+      - run: npm ci
+
+      - run: npm run typecheck
+      - run: npm test
+
+      - name: Verify the tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p 'require("./package.json").version')"
+          if [ "$tag" != "$pkg" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json version $pkg" >&2
+            exit 1
+          fi
+
+      - run: npm run dist
+
+      # A wrong Package field breaks `apt install llm-gateway` on a user's machine and
+      # nowhere earlier, so assert it here as well as in the repo script.
+      - name: Inspect the built package
+        run: |
+          deb="$(ls release/*.deb)"
+          dpkg-deb -f "$deb" Package Version Architecture Depends
+          test "$(dpkg-deb -f "$deb" Package)" = llm-gateway
+
+      - name: Import the repository signing key
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: printf '%s' "$GPG_PRIVATE_KEY" | gpg --batch --import
+
+      # The existing pool is the repository's only persistent state, so it is fetched
+      # and reused: apt-ftparchive rebuilds the indexes from whatever .deb files are
+      # present, and dropping the pool would strip older versions from the repository.
+      - name: Fetch the published repository
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: apt-repo
+        continue-on-error: true
+
+      - name: Rebuild the APT repository
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          APT_SIGNING_KEY: ${{ secrets.APT_GPG_KEY_ID }}
+          GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+          APT_BASE_URL: https://hasnat-shohag.github.io/llm-gateway
+        run: |
+          mkdir -p apt-repo
+          rm -rf apt-repo/.git
+          scripts/build-apt-repo.sh --repo apt-repo --add release/*.deb
+
+      - name: Publish to GitHub Pages
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: apt-repo
+          publish_branch: gh-pages
+          # The pool must survive, and the action would otherwise replace the branch
+          # contents wholesale.
+          keep_files: true
+          commit_message: "release ${{ github.ref_name }}"
+
+      - name: Attach artifacts to the GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.deb
+            release/*.AppImage
+          generate_release_notes: true
