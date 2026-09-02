@@ -36,6 +36,9 @@ linux:
   target:
     - deb
     - AppImage
+  # productName is "LLM Gateway", so the default artifact name carries a space into
+  # every download URL. Name the files after the executable instead.
+  artifactName: llm-gateway-${version}-${arch}.${ext}
   category: Development
   synopsis: Local LLM gateway and provider manager for Claude Code
   description: >-

@@ -18,7 +18,8 @@
     "typecheck": "tsc -p tsconfig.gateway.json --noEmit",
     "gen:icon": "node scripts/generate-icon.js",
     "start": "npm run build:gateway && electron . --ozone-platform=x11",
-    "dist": "npm run build:gateway && electron-builder",
+    "//dist": "--publish never is required, not cosmetic: electron-builder turns implicit publishing on when it detects a git tag in CI, and package.json `repository` gives it a GitHub provider to resolve, so without this it demands GH_TOKEN and fails. Release artifacts are attached by the workflow instead.",
+    "dist": "npm run build:gateway && electron-builder --publish never",
     "test": "npm run build:gateway && node --test test/*.test.js",
     "postinstall": "electron-builder install-app-deps"
   },
