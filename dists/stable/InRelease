@@ -1,0 +1,33 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Architectures: amd64
+Codename: stable
+Components: main
+Date: Wed, 02 Sep 2026 10:04:35 +0000
+Description: LLM Gateway desktop app for Claude Code
+Label: LLM Gateway
+Origin: LLM Gateway
+Suite: stable
+SHA256:
+ a3451b5079a2eee0cdc287de38ad127365ab3ddc01a88e3beed01c36a6525aaf              987 main/binary-amd64/Packages
+ 6f5e8a215108b920e4fa826e6ac2f8c6d173751ce027cae8ae615addd1c7de8e              656 main/binary-amd64/Packages.gz
+SHA512:
+ 251c5c6b0da82b86996b898982827cc5f6d2d4138c437c547e8740fb6f4b89bd2d849e651ce49153a367c205095030cb9207648c3be4c0e2c78561417f21aed2              987 main/binary-amd64/Packages
+ 0be05027b145faa1a91f43014f2c7c43835fdc57e42e329472fd95584140c0990368a3e6588a0654609f5fde1345ccd8a2195ca8931ffcf2d6355ec754cd2ac3              656 main/binary-amd64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEE5VWusCktKM/e7feOxQ54o2Aar18FAmqX9LMACgkQxQ54o2Aa
+r18zgw//XzQirHYtT1fmXeR93Ub5Q7lp675A+FxUsK3SEdBNOO01s3wkTrdMVENt
+dHSW+R2ySgmQrmQdP0OSlxrDK1ORGQ6hnyAMplTD80cRjMBELChdWSLLkd5AK815
+7pmTBjGgR+up1vPt4CaAQEUGUkMMmPQjrwuRkwK+2ZRxn7XbaJVjsRkRnruE1gdY
+EdMgD0i2DxHGHExZETHDc6Y+tq+iEZc+9N4EpgHeKY2eWlHDWyfzz6Lqt6t8sBxw
+JT8Eh8/uGwjEnon0N/zvbXQVFz+EA9aTFgdWZD/feS/jlnuZn8M/7o+rlTc/uVPD
+SGpfro4UWnzEL7sS2wLrzAl20Vgx/2ErWebCc+qkjZru/TwR8fh+3BXuMJEmstvk
+M0DhxOG+dRFmc9QYfgWs9Fpld68ubLd4iwZMLDG84IUoqYnWGASIqYC5KkpHSTN/
+TCci1DwKVQeFimkJsoUbUMxI10++VC9Ri81ETisJWv8FkCm04Pn/VR5juFcwkalo
+kmhePLsWGV2o9aBQIOxJ4H560z5wSZavNV5Vyai3Y4rbIYpNdiX/fGp9oFoa7zeP
+BOcQN3WUm9g8oucFgs5xLOplZ4k8KeXDHfyZxW7NKf0uiFQE00/LqZzP/8ddFhvP
+pHsMpXLH3//nyTWmt03ypG5jXnUIDSlv4+eQk3aCWGlg8s5GxsE=
+=3WGL
+-----END PGP SIGNATURE-----

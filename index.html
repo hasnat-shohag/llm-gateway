@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM Gateway — APT repository</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --fg: #1a1a1a;
+    --muted: #5f6672;
+    --bg: #ffffff;
+    --surface: #f5f6f8;
+    --border: #e2e5ea;
+    --accent: #2d5bd7;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fg: #e8eaed;
+      --muted: #9aa3b0;
+      --bg: #17181b;
+      --surface: #1f2126;
+      --border: #2e3238;
+      --accent: #7fa2ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0 auto; padding: 3rem 1.25rem 5rem; max-width: 46rem;
+    font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--fg); background: var(--bg);
+  }
+  h1 { font-size: 1.65rem; letter-spacing: -0.01em; margin: 0 0 0.35rem; }
+  h2 { font-size: 1.05rem; margin: 2.5rem 0 0.75rem; }
+  p.lede { color: var(--muted); margin: 0 0 2rem; }
+  pre {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.9rem 1rem; overflow-x: auto; font-size: 13.5px; line-height: 1.5;
+  }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  p code { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 0.1em 0.35em; font-size: 0.9em; }
+  a { color: var(--accent); }
+  footer { margin-top: 3.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border); color: var(--muted); font-size: 0.9rem; }
+  ol { padding-left: 1.35rem; }
+  li { margin-bottom: 0.4rem; }
+</style>
+</head>
+<body>
+
+<h1>LLM Gateway</h1>
+<p class="lede">
+  A local, Anthropic-compatible gateway for Claude Code, with a desktop app to manage it.
+  This page is the APT repository that serves it.
+</p>
+
+<h2>Install</h2>
+<pre><code>curl -fsSL https://hasnat-shohag.github.io/llm-gateway/install.sh | sh</code></pre>
+<p>
+  That script adds this repository and installs the package. If you would rather not pipe a
+  script to a shell — a reasonable instinct — the steps below are exactly what it runs.
+</p>
+
+<h2>Install manually</h2>
+<pre><code>sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://hasnat-shohag.github.io/llm-gateway/llm-gateway-archive-keyring.gpg \
+  | sudo tee /etc/apt/keyrings/llm-gateway.gpg &gt; /dev/null
+
+sudo tee /etc/apt/sources.list.d/llm-gateway.sources &gt; /dev/null &lt;&lt;'EOF'
+Types: deb
+URIs: https://hasnat-shohag.github.io/llm-gateway
+Suites: stable
+Components: main
+Architectures: amd64
+Signed-By: /etc/apt/keyrings/llm-gateway.gpg
+EOF
+
+sudo apt update
+sudo apt install llm-gateway</code></pre>
+
+<h2>Update and remove</h2>
+<p>
+  Updates arrive through <code>apt upgrade</code> like anything else. To remove the app and
+  stop tracking the repository:
+</p>
+<pre><code>sudo apt remove llm-gateway
+sudo rm /etc/apt/sources.list.d/llm-gateway.sources /etc/apt/keyrings/llm-gateway.gpg</code></pre>
+<p>
+  Configuration and usage history live in <code>~/.config/llm-gateway-desktop/</code> and are
+  left alone by <code>apt remove</code>. Delete that directory for a clean reset.
+</p>
+
+<h2>Other architectures and distributions</h2>
+<p>
+  Only <code>amd64</code> is published here. Every release also ships an AppImage, which
+  runs on any reasonably current Linux distribution — see the
+  <a href="https://github.com/hasnat-shohag/llm-gateway/releases">releases page</a>.
+</p>
+
+<footer>
+  Source, issues, and documentation:
+  <a href="https://github.com/hasnat-shohag/llm-gateway">github.com/hasnat-shohag/llm-gateway</a>.
+  MIT licensed.
+</footer>
+
+</body>
+</html>
