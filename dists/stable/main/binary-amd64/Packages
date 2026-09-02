@@ -19,3 +19,24 @@ Description: Local LLM gateway and provider manager for Claude Code
 License: MIT
 Vendor: Vivasoft <dev@vivasoft.example>
 
+Package: llm-gateway
+Architecture: amd64
+Version: 0.1.1
+Priority: optional
+Section: default
+Maintainer: Vivasoft <dev@vivasoft.example>
+Installed-Size: 329641
+Depends: libgtk-3-0, libnotify4, libnss3, libxss1, libxtst6, xdg-utils, libatspi2.0-0, libuuid1, libsecret-1-0
+Recommends: libayatana-appindicator3-1
+Filename: pool/main/llm-gateway_0.1.1_amd64.deb
+Size: 101308580
+MD5sum: b3d505837d030b67b6dd12ced98ea66b
+SHA1: de20f0974883ca20f3a288de3383b656bab858ac
+SHA256: 2fae2092f0283e718f7256e967614845b24266e2e710e7b9a4c2c989576033ce
+SHA512: cf221959494659504507cad64fb6d8451f30f350c58457b8a8cef00276469bc48cecbcea0bafcda7fafbf225eda3ffd87c87a84dc63396f6fd9e29b52f405646
+Homepage: https://github.com/hasnat-shohag/llm-gateway
+Description: Local LLM gateway and provider manager for Claude Code
+  Runs a local Anthropic-compatible gateway in the background and gives you a GUI to manage providers, watch health, and track token cost.
+License: MIT
+Vendor: Vivasoft <dev@vivasoft.example>
+
