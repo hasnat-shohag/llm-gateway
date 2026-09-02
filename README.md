@@ -89,15 +89,6 @@ ever read once, as a first-run migration source — see
 - The renderer makes no network requests of its own; its content security policy forbids them
   outright.
 
-## Documentation
-
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) — process model, module map, request lifecycle, telemetry,
-  packaging, and runbook.
-- [`PLAN.md`](PLAN.md) — design rationale and roadmap.
-- [`EXECUTION.md`](EXECUTION.md) — what has been verified by running it, and what has not.
-- [`CLAUDE.md`](CLAUDE.md) — orientation for AI coding agents, including the invariants that fail
-  silently when broken.
-
 ## License
 
 MIT — see [LICENSE](LICENSE).

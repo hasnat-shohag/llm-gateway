@@ -5,6 +5,15 @@ directories:
   output: release
   buildResources: build-resources
 
+# Chromium ships 55 locale .pak files, 47 MB of the installed tree and 7.6 MiB of the
+# compressed download, and the app's own UI is English-only. Dropping the rest leaves
+# Chromium's built-in strings (context menus, file dialogs, error pages) in en-US:
+# ui::ResourceBundle falls back to the default locale when the requested .pak is absent,
+# verified on 42.10.1 by starting with only en-US.pak present under --lang=de/fr/ja and
+# LANG=de_DE.UTF-8 (app.getLocale() returns en-US, no crash).
+electronLanguages:
+  - en-US
+
 # `files` becomes an allowlist the moment it is set, so everything the app needs
 # at runtime has to be listed. Production node_modules are always included.
 files:
@@ -72,6 +81,16 @@ deb:
   # Keep the filename in step with the package name; the default is built from
   # package.json `name` and there is no ${packageName} macro.
   artifactName: llm-gateway_${version}_${arch}.${ext}
+  # electron-builder selects xz but leaves the level to fpm, whose default is -3 (4 MiB
+  # dictionary) — far too small for a 322 MB tree, most of which is one 210 MB Chromium
+  # binary. fpm exposes no level of its own through electron-builder's options, so pass
+  # it through: --deb-compression-level 9 becomes XZ_OPT=-9 (64 MiB dictionary) around
+  # the data.tar.xz write. Measured on the 0.1.1 payload: 96.6 MiB -> 84.4 MiB, contents
+  # byte-identical. Costs ~700 MB of RAM and a few minutes on the build host; apt needs
+  # 65 MB to decompress.
+  fpm:
+    - --deb-compression-level
+    - '9'
   depends:
     - libgtk-3-0
     - libnotify4

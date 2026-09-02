@@ -17,3 +17,39 @@ providers.json
 usage.db
 usage.db-wal
 usage.db-shm
+
+# Per-developer AI agent state: prompts, skills, and machine-local permission
+# settings. Nothing here builds, tests, or documents the app — .claude alone was
+# 3.5 MB of the 7.9 MB of non-build content, duplicated almost byte for byte in
+# .opencode.
+.claude/
+.opencode/
+.cursor/
+.windsurf/
+.aider*
+.gemini/
+
+# Internal working documents. Kept locally, deliberately not published: README.md is
+# the only entry point a visitor gets. Untracking these removed README's
+# "## Documentation" section, so restoring any of them means restoring its link too.
+ARCHITECTURE.md
+PLAN.md
+EXECUTION.md
+CLAUDE.md
+
+# Editor and IDE workspace state.
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS file-manager droppings.
+.DS_Store
+Thumbs.db
+
+# Tool caches and coverage output. None are produced by the current scripts, but
+# they appear the moment anyone runs tsc --incremental, a linter, or a coverage run.
+*.tsbuildinfo
+.eslintcache
+coverage/
+.nyc_output/
