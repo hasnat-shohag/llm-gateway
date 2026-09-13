@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import { resolve } from 'path'
-import type { UsageRecord, DailySummary, ProviderDailyStats } from './types.js'
+import type { DailySummary, ProviderDailyStats, ProviderPricing, UsageRecord } from './types.js'
 
 // ---------------------------------------------------------------------------
 // Anthropic pricing table (USD per 1M tokens), per the official pricing model:
@@ -49,7 +49,20 @@ const PRICING: Array<{ prefix: string; pricing: ModelPricing }> = [
 // Unknown models fall back to Sonnet-tier standard pricing
 const DEFAULT_PRICING: ModelPricing = { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 }
 
-function getPricing(model: string): ModelPricing {
+function getPricing(model: string, override?: ProviderPricing): ModelPricing {
+  // A provider that declares its own prices wins outright. The table below only
+  // knows Anthropic's models, and its fallback is Sonnet-tier — so without this a
+  // third-party model reports a plausible-looking wrong cost. Every field is
+  // optional: a price left blank contributes nothing rather than guessing.
+  if (override) {
+    const input = override.input ?? 0
+    return {
+      input,
+      output: override.output ?? 0,
+      cacheRead: override.cacheRead ?? input,
+      cacheWrite: override.cacheWrite ?? input,
+    }
+  }
   const lower = model.toLowerCase()
   for (const entry of PRICING) {
     if (lower.startsWith(entry.prefix)) return entry.pricing
@@ -62,9 +75,10 @@ export function calculateCost(
   inputTokens: number,
   outputTokens: number,
   cacheReadTokens: number,
-  cacheWriteTokens: number
+  cacheWriteTokens: number,
+  pricing?: ProviderPricing
 ): number {
-  const p = getPricing(model)
+  const p = getPricing(model, pricing)
   const cost =
     (inputTokens      / 1_000_000) * p.input      +
     (outputTokens     / 1_000_000) * p.output      +

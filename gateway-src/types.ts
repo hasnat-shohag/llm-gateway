@@ -3,6 +3,7 @@ import type { RollingLatency } from './metrics.js'
 /** How the gateway injects the API key into upstream requests.
  * - `x-api-key`   (default) — standard Anthropic SDK header
  * - `bearer`      — Authorization: Bearer <key>  (required by AgentRouter)
+ * - `api-key`     — `api-key: <key>`, which is how Azure OpenAI authenticates
  * - `passthrough` — inject nothing; forward the CLIENT's own Authorization
  *   header untouched. This is how the user's official Claude subscription is
  *   used as a provider: Claude Code attaches its own subscription credential
@@ -10,7 +11,50 @@ import type { RollingLatency } from './metrics.js'
  *   to api.anthropic.com unchanged. The gateway never reads, stores, or
  *   refreshes that credential — Claude Code owns its whole lifecycle.
  */
-export type AuthStyle = 'x-api-key' | 'bearer' | 'passthrough'
+export type AuthStyle = 'x-api-key' | 'bearer' | 'api-key' | 'passthrough'
+
+/** API request shapes a provider accepts. `both` makes the provider eligible
+ * for either request pool, and means it is served by a byte relay — never by the
+ * translator, because the client's own shape is one it already speaks.
+ * Existing configs default to `claude`. */
+export type ProviderCompatibility = 'openai' | 'claude' | 'both'
+/** Compatibility of an incoming request. Unlike a provider, a request is one shape. */
+export type RequestCompatibility = Exclude<ProviderCompatibility, 'both'>
+
+/**
+ * Dialect quirks for an `openai` (translated) provider. Both defaults suit OpenAI
+ * and Azure.
+ */
+export interface OpenAIOptions {
+  /**
+   * Which field carries the token cap. OpenAI and Azure reasoning models reject
+   * `max_tokens` and require `max_completion_tokens` (accepted by every current
+   * model, hence the default); older local servers only know `max_tokens`.
+   */
+  maxTokensField?: 'max_tokens' | 'max_completion_tokens'
+  /**
+   * What to send as `reasoning_effort` when Claude Code asks for extended
+   * thinking. Absent = send nothing, because most models reject the field.
+   */
+  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high'
+}
+
+/**
+ * Per-provider token prices in USD per 1M tokens.
+ *
+ * Every field is optional, including input and output: a price the user does not
+ * know is better left blank than guessed, and a blank field simply contributes
+ * nothing to the cost of the call. Without this block at all, cost for a
+ * translated (OpenAI-compatible) call is recorded as zero.
+ */
+export interface ProviderPricing {
+  input?: number
+  output?: number
+  /** Defaults to `input` when that is set: most non-Anthropic endpoints bill
+   *  cached prompt tokens as ordinary input rather than at a separate rate. */
+  cacheRead?: number
+  cacheWrite?: number
+}
 
 export interface ProviderConfig {
   name: string
@@ -21,6 +65,12 @@ export interface ProviderConfig {
   weight: number
   /** Defaults to 'x-api-key' if omitted */
   authStyle?: AuthStyle
+  /** Defaults to 'claude' if omitted. */
+  compatibility?: ProviderCompatibility
+  /** Only meaningful when compatibility is 'openai' (the translated shape). */
+  openai?: OpenAIOptions
+  /** Token prices for this provider's models. Absent = no provider override. */
+  pricing?: ProviderPricing
   /**
    * Explicitly pin the sanitize mode for this provider.
    * When set, the gateway uses this value without any auto-flip probing:

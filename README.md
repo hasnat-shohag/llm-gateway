@@ -4,8 +4,8 @@
 [![Platform: Linux](https://img.shields.io/badge/platform-Linux-informational.svg)](#requirements)
 [![Electron 42.10.1](https://img.shields.io/badge/electron-42.10.1-47848f.svg)](#build-from-source)
 
-A Linux desktop app that runs a local, Anthropic-compatible HTTP gateway and points Claude Code at
-it. The gateway load-balances your requests across several providers; the app gives it a GUI —
+A Linux desktop app that runs a local OpenAI/Claude-compatible HTTP gateway and can point Claude
+Code at it. The gateway load-balances requests across several providers; the app gives it a GUI —
 provider management, health and cost visibility, and the `~/.claude/settings.json` wiring that
 connects the two.
 
@@ -99,8 +99,41 @@ The app owns `providers.json`; you should not have to hand-edit it. This is the 
 | `apiKey` | string | Required, except for `authStyle: passthrough`, which injects no key. |
 | `enabled` | boolean | Required. A disabled provider is never routed to. |
 | `weight` | integer > 0 | Required. Only the `weighted` strategy reads it. |
-| `authStyle` | `x-api-key` \| `bearer` \| `passthrough` | Defaults to `x-api-key`. |
+| `authStyle` | `x-api-key` \| `bearer` \| `api-key` \| `passthrough` | Defaults to `x-api-key`. `bearer` is what OpenAI, OpenRouter and local servers want; `api-key` is Azure OpenAI's header. |
+| `compatibility` | `openai` \| `claude` \| `both` | Defaults to `claude`. The shape this provider accepts. `both` means it is always served by a byte relay. |
+| `openai` | `{ maxTokensField?, reasoningEffort? }` | Optional, `openai` providers only. Which field carries the token cap (`max_completion_tokens` by default; `max_tokens` for older local servers), and what to send as `reasoning_effort` when Claude Code asks for thinking. No dialog control — edit `providers.json` directly. |
+| `pricing` | `{ input?, output?, cacheRead?, cacheWrite? }` | Optional, USD per 1M tokens, every field optional. Without it a translated call records cost `0` rather than Anthropic's prices. |
 | `sanitize` | boolean | Optional, and best left out. |
+
+### Request routing
+
+The client's path decides what shape it speaks: `/v1/chat/completions`, `/v1/completions`,
+`/v1/responses` and `/v1/embeddings` are OpenAI-shaped, `/v1/messages` (including `count_tokens`) is
+Claude-shaped. An unknown path falls back to the body's `model` field, and a request with neither
+signal is rejected with `400`.
+
+Which *pool* it goes to depends on the model, and only for Claude-shaped requests. Claude Code can
+be pointed at any model name, so an Anthropic-shaped request whose model is not Claude-family —
+anything without `claude` in the id and not starting with `anthropic` — is routed in this order:
+
+1. `both` providers, relayed verbatim to the path the client used;
+2. `openai` providers, translated: the request is rebuilt as a Chat Completions call and the reply
+   is rebuilt as Anthropic SSE, so Claude Code never sees the difference;
+3. `claude` providers, relayed verbatim — the fallback that keeps a proxy serving GLM, Kimi or
+   DeepSeek through an Anthropic-shaped endpoint working exactly as before.
+
+A Claude-family model on a Claude path stays in the Claude pool (`claude` and `both` providers), and
+an OpenAI-shaped request keeps its own pool (`openai` and `both` providers) with no translation. A
+pool with no enabled provider is skipped without an upstream attempt.
+
+`openai` providers are translated, so they need an OpenAI-shaped credential: `authStyle` must be
+`bearer` (or `api-key` for Azure), and the schema rejects `x-api-key` — an Anthropic header — rather
+than letting every request 401.
+
+Translation is a lossy allowlist in both directions: Claude-only fields (`thinking`, `top_k`,
+`metadata`, `context_management`, `output_config`, `cache_control`) are dropped on the way out, and
+reasoning traces (`reasoning_content`, `reasoning`) are dropped on the way back. `count_tokens`
+cannot be proxied to a Chat Completions endpoint at all, so it is answered locally with an estimate.
 
 Some upstreams fingerprint the client and require Claude Code's headers and system prompt untouched;
 others reject a request that carries them. There is no default that suits both, so the gateway

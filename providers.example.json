@@ -5,7 +5,8 @@
     "apiKey": "sk-xxxxx",
     "enabled": true,
     "weight": 1,
-    "authStyle": "x-api-key"
+    "authStyle": "x-api-key",
+    "compatibility": "claude"
   },
   {
     "name": "Bearer Auth Provider",
@@ -14,7 +15,21 @@
     "enabled": true,
     "weight": 2,
     "authStyle": "bearer",
+    "compatibility": "both",
     "sanitize": false
+  },
+  {
+    "name": "OpenAI",
+    "baseUrl": "https://api.openai.com/v1",
+    "apiKey": "sk-zzzzz",
+    "enabled": false,
+    "weight": 1,
+    "authStyle": "bearer",
+    "compatibility": "openai",
+    "pricing": {
+      "input": 1.25,
+      "output": 10
+    }
   },
   {
     "name": "Claude Official",
@@ -22,6 +37,7 @@
     "enabled": false,
     "weight": 1,
     "authStyle": "passthrough",
+    "compatibility": "claude",
     "sanitize": false
   }
 ]

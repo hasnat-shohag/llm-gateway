@@ -1,4 +1,4 @@
-import type { ProviderConfig, StrategyName } from './types.js'
+import type { ProviderCompatibility, ProviderConfig, StrategyName } from './types.js'
 import type { HealthTracker } from './health.js'
 
 export class ProviderManager {
@@ -34,8 +34,18 @@ export class ProviderManager {
     return this.providers.filter((p) => p.enabled).map((p) => ({ name: p.name }))
   }
 
-  providerCount(): number {
-    return this.providers.filter((p) => p.enabled).length
+  providerCount(compatibility?: Exclude<ProviderCompatibility, 'both'>): number {
+    return this.countMatching((p) =>
+      compatibility === undefined || this.supportsCompatibility(p, compatibility))
+  }
+
+  /**
+   * Enabled providers satisfying an arbitrary predicate — how the proxy expresses
+   * the ordered attempt phases (relay-capable `both` first, then translated
+   * `openai`, then the Claude pool).
+   */
+  countMatching(match: (provider: ProviderConfig) => boolean): number {
+    return this.providers.filter((p) => p.enabled && match(p)).length
   }
 
   select(): ProviderConfig | null {
@@ -45,12 +55,33 @@ export class ProviderManager {
   }
 
   /** Select a provider that is not in the `exclude` set. */
-  selectExcluding(exclude: Set<string>): ProviderConfig | null {
+  selectExcluding(
+    exclude: Set<string>,
+    compatibility?: Exclude<ProviderCompatibility, 'both'>
+  ): ProviderConfig | null {
+    return this.selectMatching(exclude, (p) =>
+      compatibility === undefined || this.supportsCompatibility(p, compatibility))
+  }
+
+  /** Select a provider satisfying `match`, skipping the `exclude` set and any
+   *  provider the health tracker is holding in cooldown. */
+  selectMatching(
+    exclude: Set<string>,
+    match: (provider: ProviderConfig) => boolean
+  ): ProviderConfig | null {
     const available = this.health
-      .getProviders(this.providers.filter((p) => p.enabled))
+      .getProviders(this.providers.filter((p) => p.enabled && match(p)))
       .filter((p) => !exclude.has(p.name))
     if (available.length === 0) return null
     return this.selectFrom(available)
+  }
+
+  private supportsCompatibility(
+    provider: ProviderConfig,
+    compatibility: Exclude<ProviderCompatibility, 'both'>
+  ): boolean {
+    const providerCompatibility = provider.compatibility ?? 'claude'
+    return providerCompatibility === 'both' || providerCompatibility === compatibility
   }
 
   private selectFrom(available: ProviderConfig[]): ProviderConfig {

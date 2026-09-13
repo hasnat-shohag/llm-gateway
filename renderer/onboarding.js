@@ -101,7 +101,7 @@ function providerStep() {
       : 'Add at least one provider',
     body: count
       ? 'The gateway watches providers.json, so edits apply to the next request without a restart.'
-      : 'A provider is an Anthropic-compatible base URL plus its key. The gateway load-balances across the enabled ones and fails over when one starts erroring.',
+      : 'Add a base URL and key, then choose whether the provider accepts OpenAI requests, Claude requests, or both. The gateway load-balances and fails over inside the matching pool.',
     done: count > 0,
     active: count === 0 && state.gateway.status === 'running',
     actions,

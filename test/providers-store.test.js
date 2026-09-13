@@ -20,8 +20,8 @@ const KEY_B = 'sk-bbbbbbbbbbbbbbbbbbbb5678'
 
 const SEED = [
   { name: 'alpha', baseUrl: 'https://alpha.example.com', apiKey: KEY_A, enabled: true, weight: 1 },
-  { name: 'beta', baseUrl: 'https://beta.example.com', apiKey: KEY_B, enabled: false, weight: 3, authStyle: 'bearer' },
-  { name: 'official', baseUrl: 'https://api.anthropic.com', enabled: true, weight: 1, authStyle: 'passthrough' },
+  { name: 'beta', baseUrl: 'https://beta.example.com', apiKey: KEY_B, enabled: false, weight: 3, authStyle: 'bearer', compatibility: 'both' },
+  { name: 'official', baseUrl: 'https://api.anthropic.com', enabled: true, weight: 1, authStyle: 'passthrough', compatibility: 'claude' },
 ]
 
 function seed(providers = SEED) {
@@ -62,6 +62,66 @@ test('read masks keys and never exposes a full one', async () => {
   const official = result.providers.find((p) => p.name === 'official')
   assert.equal(official.apiKeySet, false)
   assert.equal(official.apiKeyMasked, '••••')
+  assert.equal(official.compatibility, 'claude')
+})
+
+test('write carries compatibility and defaults legacy providers to claude', async () => {
+  seed()
+  const before = await store.read()
+  const result = await store.write(
+    asIncoming(before.providers, { alpha: { compatibility: 'openai', authStyle: 'bearer' } }),
+    { ifMatch: before.version },
+  )
+  assert.equal(result.ok, true)
+  assert.equal(result.providers.find((p) => p.name === 'alpha').compatibility, 'openai')
+  assert.equal(result.providers.find((p) => p.name === 'beta').compatibility, 'both')
+})
+
+test('write rejects a translated provider left on the Anthropic credential', async () => {
+  seed()
+  const before = await store.read()
+  const result = await store.write(asIncoming(before.providers, { alpha: { compatibility: 'openai' } }), {
+    ifMatch: before.version,
+  })
+  assert.equal(result.ok, false)
+  assert.match(result.error, /compatibility "openai" needs authStyle "bearer"/)
+})
+
+test('write round-trips the openai dialect block and pricing, and clears pricing', async () => {
+  seed([
+    ...SEED,
+    {
+      name: 'translated',
+      baseUrl: 'https://api.openai.com/v1',
+      apiKey: KEY_B,
+      enabled: true,
+      weight: 1,
+      authStyle: 'bearer',
+      compatibility: 'openai',
+      openai: { reasoningEffort: 'low' },
+      pricing: { input: 2.5, output: 10 },
+    },
+  ])
+  const before = await store.read()
+  const translated = before.providers.find((p) => p.name === 'translated')
+
+  // The dialog has no control for the dialect block, so it survives only because
+  // the store copies it — losing it would silently change request translation.
+  assert.deepEqual(translated.openai, { maxTokensField: 'max_completion_tokens', reasoningEffort: 'low' })
+  assert.deepEqual(translated.pricing, { input: 2.5, output: 10 })
+
+  const kept = await store.write(asIncoming(before.providers), { ifMatch: before.version })
+  assert.equal(kept.ok, true)
+  const afterKeep = kept.providers.find((p) => p.name === 'translated')
+  assert.deepEqual(afterKeep.openai, { maxTokensField: 'max_completion_tokens', reasoningEffort: 'low' })
+  assert.deepEqual(afterKeep.pricing, { input: 2.5, output: 10 })
+
+  const cleared = await store.write(
+    asIncoming(kept.providers, { translated: { pricing: {} } }),
+    { ifMatch: kept.version },
+  )
+  assert.equal(cleared.ok, true)
+  assert.equal(cleared.providers.find((p) => p.name === 'translated').pricing, undefined)
 })
 
 test('read reports invalid JSON instead of throwing', async () => {

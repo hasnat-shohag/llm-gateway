@@ -44,6 +44,11 @@ function toPublic(p) {
     enabled: p.enabled,
     weight: p.weight,
     authStyle: p.authStyle ?? 'x-api-key',
+    compatibility: p.compatibility ?? 'claude',
+    // Hand-edited fields with no dialog control: carried through so the app
+    // neither loses nor rewrites them (an `openai` dialect block; token prices).
+    openai: p.openai,
+    pricing: p.pricing,
     sanitize: typeof p.sanitize === 'boolean' ? p.sanitize : null,
     apiKeySet: typeof p.apiKey === 'string' && p.apiKey.length > 0,
     apiKeyLength: typeof p.apiKey === 'string' ? p.apiKey.length : 0,
@@ -104,6 +109,7 @@ function mergeIncoming(incoming) {
   return incoming.map((raw) => {
     const previous = byName.get(raw.originalName ?? raw.name)
     const authStyle = raw.authStyle ?? previous?.authStyle ?? 'x-api-key'
+    const compatibility = raw.compatibility ?? previous?.compatibility ?? 'claude'
 
     const out = {
       name: typeof raw.name === 'string' ? raw.name.trim() : raw.name,
@@ -111,9 +117,23 @@ function mergeIncoming(incoming) {
       enabled: raw.enabled,
       weight: raw.weight,
       authStyle,
+      compatibility,
     }
 
     if (typeof raw.sanitize === 'boolean') out.sanitize = raw.sanitize
+
+    // No dialog control edits these, so they survive a round trip only because
+    // they are copied here. `pricing` is the exception: the dialog sends an
+    // object (possibly empty to clear it), so `undefined` means "unchanged" and
+    // `{}` means "no prices".
+    const openai = raw.openai ?? previous?.openai
+    if (openai) out.openai = openai
+    if (raw.pricing !== undefined) {
+      const pricing = raw.pricing
+      if (pricing && typeof pricing === 'object' && Object.keys(pricing).length > 0) out.pricing = pricing
+    } else if (previous?.pricing) {
+      out.pricing = previous.pricing
+    }
 
     // Passthrough injects no credential, so it carries no key at all.
     if (authStyle !== 'passthrough') {
