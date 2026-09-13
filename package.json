@@ -1,6 +1,6 @@
 {
   "name": "llm-gateway-desktop",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Desktop app that runs and manages the local LLM gateway for Claude Code",
   "homepage": "https://github.com/hasnat-shohag/llm-gateway",
   "repository": {
