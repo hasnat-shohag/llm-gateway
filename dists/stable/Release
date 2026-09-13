@@ -1,14 +1,14 @@
 Architectures: amd64
 Codename: stable
 Components: main
-Date: Thu, 03 Sep 2026 05:01:53 +0000
+Date: Sun, 13 Sep 2026 15:53:24 +0000
 Description: LLM Gateway desktop app for Claude Code
 Label: LLM Gateway
 Origin: LLM Gateway
 Suite: stable
 SHA256:
- 3e55f3460ce1910b25159164f876a8655f80f8f75174f670288a68e7a09a8c40             2960 main/binary-amd64/Packages
- 023ba8e3583d153dbf01658524c579eabac9bf1a5568e9491aa1a591a085f4de             1062 main/binary-amd64/Packages.gz
+ 4aa5425edd3d7cb3bbba84011b87a9d54f586e7271f6a52d72fc61063217016f             3946 main/binary-amd64/Packages
+ ff099a36e9ceae61c92c667561ee1afc0bdded9aa4cdc73ed796f3aecc1fbb86             1256 main/binary-amd64/Packages.gz
 SHA512:
- e9131e502e30b7f2423a42fc69d411aa1a31f9db2e097e58bfb44262e162116c3880082b65ddf02919f05cf5903f788dc6dde64068c87cb3d83140406a29592d             2960 main/binary-amd64/Packages
- c25d2759709a3a6b319fd014d175ff47555351bdf2bc6b2ee3e5c570438acdd7e6bfdfc9b80b7245d656f45c6b8cb9f1b2c58874057e2b3f02a6446084805ada             1062 main/binary-amd64/Packages.gz
+ 9cc7e07df1c746f872aa7f239acd72810e330e27be5d025933fc0f6a4715d73ee8b5402273e434215a66af9790e1a3a2b169c0fc229e7a9013504d2b628c61ae             3946 main/binary-amd64/Packages
+ 8527ae5a1b214716af637bffedb56c2faefa4b1c0789e66376bdfe163433944433d136ba94068e24b83156ae3b301bbdf57f89a0b5c4d7b4410f2c000c7fe897             1256 main/binary-amd64/Packages.gz
