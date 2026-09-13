@@ -12,6 +12,12 @@ const AUTH_STYLES = [
   { value: 'passthrough', label: 'passthrough (official subscription)' },
 ]
 
+const PROVIDER_COMPATIBILITIES = [
+  { value: 'openai', label: 'OpenAI-compatible' },
+  { value: 'claude', label: 'Claude-compatible' },
+  { value: 'both', label: 'Both-compatible' },
+]
+
 const SANITIZE_OPTIONS = [
   { value: 'auto', label: 'auto-learn' },
   { value: 'on', label: 'pinned on' },
@@ -23,6 +29,7 @@ const UNCHANGED = '__UNCHANGED__'
 const COLUMNS = [
   { key: 'on', label: 'On' },
   { key: 'provider', label: 'Provider' },
+  { key: 'compatibility', label: 'Compatibility' },
   { key: 'health', label: 'Health' },
   { key: 'sanitize', label: 'Sanitize' },
   { key: 'weight', label: 'Weight', num: true },
@@ -58,9 +65,13 @@ function toPayload(p) {
     enabled: p.enabled,
     weight: p.weight,
     authStyle: p.authStyle,
+    compatibility: p.compatibility,
   }
   if (typeof p.sanitize === 'boolean') out.sanitize = p.sanitize
   if (p.authStyle !== 'passthrough') out.apiKey = p.newApiKey ?? UNCHANGED
+  // Only the `openai` (translated) shape carries prices. An empty object is sent
+  // on purpose: it is what clears a price that used to be set.
+  if (p.compatibility === 'openai') out.pricing = p.pricing ?? {}
   return out
 }
 
@@ -203,7 +214,7 @@ function editDialog(existing, preset = {}) {
     ? { ...existing, originalName: existing.name, newApiKey: undefined }
     : {
       name: '', baseUrl: '', enabled: true, weight: 1,
-      authStyle: 'bearer', sanitize: null, apiKeySet: false, ...preset,
+      authStyle: 'bearer', compatibility: 'claude', sanitize: null, apiKeySet: false, pricing: undefined, ...preset,
     }
 
   const errorLine = el('div', { class: 'notice bad', hidden: true }, [
@@ -224,10 +235,29 @@ function editDialog(existing, preset = {}) {
   const authSelect = el('select', {}, AUTH_STYLES.map((o) =>
     el('option', { value: o.value, text: o.label, selected: o.value === draft.authStyle })))
 
+  const compatibilitySelect = el('select', {}, PROVIDER_COMPATIBILITIES.map((o) =>
+    el('option', { value: o.value, text: o.label, selected: o.value === draft.compatibility })))
+
   const sanitizeSelect = el('select', {}, SANITIZE_OPTIONS.map((o) => {
     const current = draft.sanitize === null || draft.sanitize === undefined ? 'auto' : (draft.sanitize ? 'on' : 'off')
     return el('option', { value: o.value, text: o.label, selected: o.value === current })
   }))
+
+  const priceInput = el('input', {
+    type: 'number', min: '0', step: '0.01', class: 'narrow', autocomplete: 'off',
+    value: typeof draft.pricing?.input === 'number' ? String(draft.pricing.input) : '',
+    placeholder: 'e.g. 3',
+  })
+  const priceOutput = el('input', {
+    type: 'number', min: '0', step: '0.01', class: 'narrow', autocomplete: 'off',
+    value: typeof draft.pricing?.output === 'number' ? String(draft.pricing.output) : '',
+    placeholder: 'e.g. 15',
+  })
+  const pricingGrid = el('div', { class: 'field-grid' }, [
+    field('Input $/1M', priceInput, 'Optional. Leave blank if you do not know it.'),
+    field('Output $/1M', priceOutput, 'Optional. Prices apply to translated calls only.'),
+  ])
+  pricingGrid.hidden = true
 
   const keyField = field('API key', keyInput,
     draft.apiKeySet ? 'Leave blank to keep the existing key.' : undefined)
@@ -237,12 +267,22 @@ function editDialog(existing, preset = {}) {
 
   const syncAuthStyle = () => {
     const passthrough = authSelect.value === 'passthrough'
+    const openaiOnly = compatibilitySelect.value === 'openai'
     keyField.hidden = passthrough
     passthroughNote.hidden = !passthrough
-    sanitizeSelect.disabled = passthrough
+    sanitizeSelect.disabled = passthrough || openaiOnly
+    compatibilitySelect.disabled = passthrough
+    if (passthrough) compatibilitySelect.value = 'claude'
+    if (openaiOnly) sanitizeSelect.value = 'off'
     if (passthrough && !urlInput.value.trim()) urlInput.value = 'https://api.anthropic.com'
+    pricingGrid.hidden = !openaiOnly
+    // `x-api-key` is an Anthropic header; a translated provider cannot use it, and
+    // the schema rejects the pair. Move the select with the user rather than
+    // letting them hit that error.
+    if (openaiOnly && authSelect.value === 'x-api-key') authSelect.value = 'bearer'
   }
   authSelect.addEventListener('change', syncAuthStyle)
+  compatibilitySelect.addEventListener('change', syncAuthStyle)
   syncAuthStyle()
 
   /** Name the problem on the field that owns it, then move focus there. */
@@ -268,7 +308,10 @@ function editDialog(existing, preset = {}) {
       field('Base URL', urlInput, 'No trailing slash; the request path is appended as-is.'),
       passthroughNote,
       field('Auth style', authSelect),
+      field('Compatibility', compatibilitySelect,
+        'The shape this provider accepts. OpenAI-compatible requests are rewritten to Chat Completions and back, so Claude Code can run a non-Claude model through it; both-compatible providers are relayed untouched.'),
       keyField,
+      pricingGrid,
       el('div', { class: 'field-grid' }, [
         field('Weight', weightInput, 'Used by the weighted strategy.'),
         field('Sanitize', sanitizeSelect, 'Leave on auto unless you know the upstream\'s requirement.'),
@@ -291,6 +334,7 @@ function editDialog(existing, preset = {}) {
           }
 
           const authStyle = authSelect.value
+          const compatibility = compatibilitySelect.value
           const typedKey = keyInput.value.trim()
           if (authStyle !== 'passthrough' && !draft.apiKeySet && !typedKey) {
             return fail('Paste an API key, or switch the auth style to passthrough.', keyInput)
@@ -299,6 +343,25 @@ function editDialog(existing, preset = {}) {
           const sanitize = sanitizeSelect.value === 'auto' ? null
             : sanitizeSelect.value === 'on' ? true : false
 
+          // Prices are optional on purpose: a blank field is simply left out, and
+          // the gateway then records cost zero rather than guessing a price.
+          // Seeded from the stored object so the cache prices, which have no
+          // control, survive an edit made through the dialog.
+          const pricing = { ...(draft.pricing ?? {}) }
+          const priceFields = [[priceInput, 'Input price', 'input'], [priceOutput, 'Output price', 'output']]
+          for (const [input, label, key] of priceFields) {
+            const rawPrice = input.value.trim()
+            if (rawPrice === '') {
+              delete pricing[key]
+              continue
+            }
+            const value = Number(rawPrice)
+            if (!Number.isFinite(value) || value < 0) {
+              return fail(`${label} must be a number of 0 or more.`, input)
+            }
+            pricing[key] = value
+          }
+
           const entry = {
             name,
             originalName: draft.originalName,
@@ -306,7 +369,9 @@ function editDialog(existing, preset = {}) {
             enabled: draft.enabled ?? true,
             weight,
             authStyle,
-            sanitize: authStyle === 'passthrough' ? false : sanitize,
+            compatibility,
+            sanitize: authStyle === 'passthrough' || compatibility === 'openai' ? false : sanitize,
+            pricing: compatibility === 'openai' ? pricing : undefined,
             newApiKey: typedKey ? typedKey : undefined,
           }
 
@@ -335,7 +400,13 @@ function editDialog(existing, preset = {}) {
  */
 export function addProviderDialog({ passthrough = false } = {}) {
   editDialog(null, passthrough
-    ? { name: 'Claude Official', baseUrl: 'https://api.anthropic.com', authStyle: 'passthrough', sanitize: false }
+    ? {
+      name: 'Claude Official',
+      baseUrl: 'https://api.anthropic.com',
+      authStyle: 'passthrough',
+      compatibility: 'claude',
+      sanitize: false,
+    }
     : {})
 }
 
@@ -379,6 +450,7 @@ function providerRow(row, index) {
     ? { ...row, enabled: pendingEnabled.enabled }
     : row
   const isPassthrough = provider.authStyle === 'passthrough'
+  const compatibility = provider.compatibility ?? 'claude'
   // Any in-flight write invalidates the version every other control would send,
   // so all of them are gated, not just the busy row's.
   const writing = busyName !== null
@@ -398,6 +470,10 @@ function providerRow(row, index) {
         isPassthrough ? tag('official', 'official subscription', 'shield') : null,
       ]),
     ]),
+    el('td', {}, [tag(
+      compatibility === 'both' ? 'good' : '',
+      compatibility === 'openai' ? 'OpenAI' : compatibility === 'claude' ? 'Claude' : 'both',
+    )]),
     el('td', {}, [healthCell(provider)]),
     el('td', {}, [sanitizeCell(provider)]),
     el('td', { class: 'num', text: String(provider.weight) }),
@@ -425,7 +501,7 @@ function providerTable() {
 
   const body = state.loaded
     ? state.providers.map((p, i) => providerRow(p, i))
-    : skeletonRows(['short', 'text', 'tag', 'tag', 'short', 'text', 'short', 'short'], 3)
+    : skeletonRows(['short', 'text', 'tag', 'tag', 'tag', 'short', 'text', 'short', 'short'], 3)
 
   return el('div', { class: 'table-scroll', 'data-scroll-key': 'providers' }, [el('table', {}, [head, el('tbody', {}, body)])])
 }
@@ -435,7 +511,10 @@ function providerTable() {
 function subtitle() {
   if (!state.loaded) return 'reading providers.json…'
   const strategy = state.stats?.strategy
-  const eligible = `${state.enabledNames.length} eligible in the running gateway`
+  const enabled = state.providers.filter((p) => p.enabled)
+  const openai = enabled.filter((p) => p.compatibility === 'openai' || p.compatibility === 'both').length
+  const claude = enabled.filter((p) => p.compatibility === 'claude' || p.compatibility === 'both').length
+  const eligible = `${state.enabledNames.length} eligible · ${openai} OpenAI · ${claude} Claude`
   return strategy ? `${eligible} · ${strategy} strategy` : eligible
 }
 
@@ -459,6 +538,7 @@ function officialPanel() {
             enabled: true,
             weight: 1,
             authStyle: 'passthrough',
+            compatibility: 'claude',
             sanitize: false,
           }]), { onDone: render }),
         }),

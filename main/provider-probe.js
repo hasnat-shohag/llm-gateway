@@ -15,6 +15,7 @@ const providersStore = require('./providers-store.js')
 const TIMEOUT_MS = 15_000
 const PREVIEW_CHARS = 300
 const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
+const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini'
 
 /** Never let a provider key reach the renderer or a log via the response preview. */
 function scrub(text, apiKey) {
@@ -33,6 +34,9 @@ async function run(name, { model = DEFAULT_MODEL } = {}) {
   if (!provider) return { ok: false, error: `unknown provider "${name}" — reload and try again` }
 
   const authStyle = provider.authStyle ?? 'x-api-key'
+  const compatibility = provider.compatibility ?? 'claude'
+  const isClaudeProbe = compatibility === 'claude'
+    || (compatibility === 'both' && model.toLowerCase().startsWith('claude-'))
   if (authStyle === 'passthrough') {
     // There is no credential to test with: the whole design is that Claude Code
     // supplies its own, and this process never sees it.
@@ -45,25 +49,35 @@ async function run(name, { model = DEFAULT_MODEL } = {}) {
   // Mirror proxy.ts's header construction so the probe reflects real behavior.
   const headers = {
     'content-type': 'application/json',
-    'anthropic-version': '2023-06-01',
     'accept-encoding': 'identity',
+    ...(isClaudeProbe ? { 'anthropic-version': '2023-06-01' } : {}),
   }
   if (authStyle === 'bearer') headers['authorization'] = `Bearer ${provider.apiKey}`
+  else if (authStyle === 'api-key') headers['api-key'] = provider.apiKey
   else headers['x-api-key'] = provider.apiKey
 
-  const body = JSON.stringify({
-    model,
-    max_tokens: 1,
-    stream: false,
-    messages: [{ role: 'user', content: 'ping' }],
-  })
+  const probedModel = model === DEFAULT_MODEL && !isClaudeProbe ? DEFAULT_OPENAI_MODEL : model
+  const body = isClaudeProbe
+    ? JSON.stringify({
+      model: probedModel,
+      max_tokens: 1,
+      stream: false,
+      messages: [{ role: 'user', content: 'ping' }],
+    })
+    : JSON.stringify({
+      model: probedModel,
+      max_completion_tokens: 1,
+      stream: false,
+      messages: [{ role: 'user', content: 'ping' }],
+    })
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
   const startedAt = Date.now()
 
   try {
-    const res = await fetch(`${provider.baseUrl}/v1/messages`, {
+    const path = isClaudeProbe ? '/v1/messages' : openAIProbePath(provider.baseUrl)
+    const res = await fetch(`${provider.baseUrl.replace(/\/+$/, '')}${path}`, {
       method: 'POST',
       headers,
       body,
@@ -83,8 +97,9 @@ async function run(name, { model = DEFAULT_MODEL } = {}) {
       // gateway's own guards look for.
       looksLikeHtml: contentType.includes('text/html') || preview.trimStart().startsWith('<'),
       bodyPreview: preview,
-      model,
+      model: probedModel,
       authStyle,
+      compatibility,
     }
   } catch (err) {
     return {
@@ -92,11 +107,22 @@ async function run(name, { model = DEFAULT_MODEL } = {}) {
       statusCode: 0,
       latencyMs: Date.now() - startedAt,
       error: err.name === 'AbortError' ? `no response within ${TIMEOUT_MS / 1000}s` : err.message,
-      model,
+      model: probedModel,
       authStyle,
+      compatibility,
     }
   } finally {
     clearTimeout(timer)
+  }
+}
+
+function openAIProbePath(baseUrl) {
+  try {
+    return new URL(baseUrl).pathname.replace(/\/+$/, '').endsWith('/v1')
+      ? '/chat/completions'
+      : '/v1/chat/completions'
+  } catch {
+    return '/v1/chat/completions'
   }
 }
 

@@ -12,9 +12,10 @@ const { pathToFileURL } = require('node:url')
 const { join, dirname } = require('node:path')
 
 /** Canonical key order for serializing providers.json. */
-const PROVIDER_KEY_ORDER = ['name', 'baseUrl', 'apiKey', 'enabled', 'weight', 'authStyle', 'sanitize']
+const PROVIDER_KEY_ORDER = ['name', 'baseUrl', 'apiKey', 'enabled', 'weight', 'authStyle', 'compatibility', 'openai', 'pricing', 'sanitize']
 
-const AUTH_STYLES = ['x-api-key', 'bearer', 'passthrough']
+const AUTH_STYLES = ['x-api-key', 'bearer', 'api-key', 'passthrough']
+const PROVIDER_COMPATIBILITIES = ['openai', 'claude', 'both']
 
 let schemaPromise = null
 
@@ -76,4 +77,11 @@ function serializeProviders(providers) {
   return `${JSON.stringify(ordered, null, 2)}\n`
 }
 
-module.exports = { validateProviders, serializeProviders, normalizeBaseUrl, PROVIDER_KEY_ORDER, AUTH_STYLES }
+module.exports = {
+  validateProviders,
+  serializeProviders,
+  normalizeBaseUrl,
+  PROVIDER_KEY_ORDER,
+  AUTH_STYLES,
+  PROVIDER_COMPATIBILITIES,
+}

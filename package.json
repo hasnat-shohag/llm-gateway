@@ -23,7 +23,7 @@
     "//release": "Pre-flight checks, version bump, tag, and push. The workflow does the actual publishing. npm swallows bare arguments, so the bump has to come after `--`: npm run release -- patch",
     "release": "scripts/release.sh",
     "test": "npm run build:gateway && node --test test/*.test.js",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "node scripts/install-electron-native-deps.js"
   },
   "engines": {
     "node": ">=22.0.0"

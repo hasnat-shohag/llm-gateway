@@ -11,13 +11,34 @@ export const providerSchema = z
     apiKey: z.string().min(1).optional(),
     enabled: z.boolean(),
     weight: z.number().int().positive(),
-    authStyle: z.enum(['x-api-key', 'bearer', 'passthrough']).default('x-api-key'),
+    authStyle: z.enum(['x-api-key', 'bearer', 'api-key', 'passthrough']).default('x-api-key'),
+    compatibility: z.enum(['openai', 'claude', 'both']).default('claude'),
     /**
      * Pin the sanitize mode instead of auto-learning it. Absent = auto-learn.
      * NOTE: this field must be declared here — zod strips unknown keys, so
      * omitting it silently discarded the value and made pinning dead code.
      */
     sanitize: z.boolean().optional(),
+    /** Dialect quirks for a translated ('openai') provider; the defaults suit
+     *  OpenAI and Azure. */
+    openai: z
+      .object({
+        maxTokensField: z.enum(['max_tokens', 'max_completion_tokens']).default('max_completion_tokens'),
+        reasoningEffort: z.enum(['minimal', 'low', 'medium', 'high']).optional(),
+      })
+      .optional(),
+    /**
+     * USD per 1M tokens, every field optional. Absent = no provider override, and
+     * a translated call records cost zero rather than Anthropic's prices.
+     */
+    pricing: z
+      .object({
+        input: z.number().nonnegative().optional(),
+        output: z.number().nonnegative().optional(),
+        cacheRead: z.number().nonnegative().optional(),
+        cacheWrite: z.number().nonnegative().optional(),
+      })
+      .optional(),
   })
   .superRefine((p, ctx) => {
     if (p.authStyle !== 'passthrough' && !p.apiKey) {
@@ -26,6 +47,26 @@ export const providerSchema = z
         path: ['apiKey'],
         message: `provider "${p.name}": apiKey is required unless authStyle is "passthrough"`,
       })
+    }
+    if (p.authStyle === 'passthrough' && p.compatibility !== 'claude') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['compatibility'],
+        message: `provider "${p.name}": passthrough must use compatibility "claude"`,
+      })
+    }
+    if (p.compatibility === 'openai') {
+      // `x-api-key` is an Anthropic header and is also the schema default, so
+      // without this rule the common case (compatibility switched, authStyle left
+      // alone) is a 401 on every request with nothing in the config to point at.
+      // OpenAI, OpenRouter and local servers want 'bearer'; Azure wants 'api-key'.
+      if (p.authStyle !== 'bearer' && p.authStyle !== 'api-key') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['authStyle'],
+          message: `provider "${p.name}": compatibility "openai" needs authStyle "bearer" (or "api-key" for Azure OpenAI)`,
+        })
+      }
     }
   })
 

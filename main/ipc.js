@@ -34,7 +34,7 @@ function checkIncomingProviders(input) {
     if (typeof p.enabled !== 'boolean') return `entry ${i}: enabled must be a boolean`
     if (!Number.isInteger(p.weight)) return `entry ${i}: weight must be an integer`
     if (p.apiKey !== undefined && typeof p.apiKey !== 'string') return `entry ${i}: apiKey must be a string`
-    if (p.authStyle !== undefined && !['x-api-key', 'bearer', 'passthrough'].includes(p.authStyle)) {
+    if (p.authStyle !== undefined && !['x-api-key', 'bearer', 'api-key', 'passthrough'].includes(p.authStyle)) {
       return `entry ${i}: unknown authStyle`
     }
     if (p.sanitize !== undefined && p.sanitize !== null && typeof p.sanitize !== 'boolean') {
