@@ -17,6 +17,10 @@ const { tmpdir } = require('node:os')
 const { join } = require('node:path')
 const { pathToFileURL } = require('node:url')
 
+// The pricing refresh route would otherwise crawl llmpricing.dev for every model
+// in its body; the suite runs offline.
+process.env.LLMPRICING_FETCH = '0'
+
 async function loadGatewayModule(name) {
   return import(pathToFileURL(join(__dirname, '..', 'build', 'gateway', name)).href)
 }
@@ -277,10 +281,38 @@ test('a non-Claude model falls back to the Claude pool when that is all there is
   }
 })
 
+test('POST /pricing/refresh re-checks models without disturbing the proxy routes', async () => {
+  const gateway = await startGateway([])
+
+  try {
+    const res = await fetch(`${gateway.baseUrl}/pricing/refresh`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ models: ['gpt-4o', 'not-a-real-model'] }),
+    })
+    assert.equal(res.status, 200)
+    const body = await res.json()
+    // LLMPRICING_FETCH=0 above turns the live crawl into an explicit no-op.
+    assert.equal(body.skipped, true)
+    assert.deepEqual(body.refreshed, [])
+    assert.equal(body.failed.length, 2)
+    assert.ok(body.status.snapshotCount >= 500)
+    // The catch-all proxy must not have swallowed the route…
+    assert.equal(gateway.recorded.length, 0)
+    // …and neither did a bogus body break it.
+    const empty = await fetch(`${gateway.baseUrl}/pricing/refresh`, { method: 'POST' })
+    assert.equal(empty.status, 200)
+    assert.deepEqual((await empty.json()).failed, [])
+  } finally {
+    await gateway.close()
+  }
+})
+
 test('an OpenAI-shaped request is still relayed raw and metered as OpenAI usage', async () => {
   // Codex and opencode speak Chat Completions. Their stream is not translated, so
-  // the interceptor has to read OpenAI chunks — and, with no provider prices, must
-  // not price them against Anthropic's table.
+  // the interceptor has to read OpenAI chunks. Pricing: a model the tables know
+  // (claude-sonnet-4-5 over an OpenRouter-style host) records its real list cost;
+  // a model nobody knows records zero rather than a guessed price.
   const upstream = await mockUpstream((_req, res) => sse(res, OPENAI_STREAM))
   const gateway = await startGateway([
     {
@@ -295,11 +327,14 @@ test('an OpenAI-shaped request is still relayed raw and metered as OpenAI usage'
   ])
 
   try {
-    const res = await fetch(`${gateway.baseUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-5', stream: true, messages: [{ role: 'user', content: 'hi' }] }),
-    })
+    const ask = (model) =>
+      fetch(`${gateway.baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model, stream: true, messages: [{ role: 'user', content: 'hi' }] }),
+      })
+
+    const res = await ask('claude-sonnet-4-5')
     const text = await res.text()
 
     assert.equal(upstream.requests.length, 1)
@@ -313,7 +348,17 @@ test('an OpenAI-shaped request is still relayed raw and metered as OpenAI usage'
     assert.equal(gateway.recorded.length, 1)
     assert.equal(gateway.recorded[0].inputTokens, 9)
     assert.equal(gateway.recorded[0].outputTokens, 2)
-    assert.equal(gateway.recorded[0].costUsd, 0)
+    // 9 in @ $3/1M + 2 out @ $15/1M — the Anthropic table prices its own model
+    // even on an OpenAI-shaped endpoint.
+    assert.equal(gateway.recorded[0].costUsd, 0.000057)
+
+    // A model no table knows: tokens are recorded, cost is not guessed.
+    await ask('mystery-vendor-model-x')
+    assert.equal(gateway.recorded.length, 2)
+    assert.equal(gateway.recorded[1].model, 'mystery-vendor-model-x')
+    assert.equal(gateway.recorded[1].inputTokens, 9)
+    assert.equal(gateway.recorded[1].outputTokens, 2)
+    assert.equal(gateway.recorded[1].costUsd, 0)
   } finally {
     await gateway.close()
     await upstream.close()

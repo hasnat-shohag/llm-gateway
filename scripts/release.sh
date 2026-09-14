@@ -134,6 +134,24 @@ else
   note "could not read $packages_url; skipping the already-published check"
 fi
 
+# The bundled llmpricing.dev snapshot is the only pricing most models ever hit, so
+# refresh it before the typecheck and tests — they then run against the prices this
+# release will actually ship (and pin any drifted expectation that has to change).
+# Best-effort on purpose: the third-party site being down must not block a gateway
+# release; the existing snapshot ships instead.
+note "pricing snapshot"
+if npm run --silent gen:pricing; then
+  if [[ -n "$(git status --porcelain gateway-src/external-pricing-data.ts)" ]]; then
+    note "snapshot changed; it will be committed with the release"
+  fi
+  # A dry run promises to change nothing, so put the regenerated file back.
+  if (( DRY_RUN )); then
+    git checkout -- gateway-src/external-pricing-data.ts
+  fi
+else
+  note "WARNING: pricing snapshot refresh failed; continuing with the existing snapshot"
+fi
+
 if (( RUN_TESTS )); then
   note "typecheck"
   npm run --silent typecheck
@@ -172,9 +190,10 @@ if (( ! ASSUME_YES )); then
 fi
 
 # --no-git-tag-version because the commit and tag are made here, together, with a message
-# that matches the repository's conventions.
+# that matches the repository's conventions. The pricing snapshot is listed alongside the
+# version files so a refresh that changed it rides along (an unchanged path is a no-op).
 npm version "$VERSION" --no-git-tag-version >/dev/null
-git commit --quiet -m "chore: release $TAG" -- package.json package-lock.json
+git commit --quiet -m "chore: release $TAG" -- package.json package-lock.json gateway-src/external-pricing-data.ts
 git tag -a "$TAG" -m "$TAG"
 note "committed $(git rev-parse --short HEAD), tagged $TAG"
 note "to undo before the push: git tag -d $TAG && git reset --hard HEAD~1"

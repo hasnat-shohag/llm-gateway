@@ -4,7 +4,8 @@ import { ProviderManager } from './provider-manager.js'
 import { HealthTracker } from './health.js'
 import { createProxyHandler } from './proxy.js'
 import { createLogger } from './logger.js'
-import { UsageTracker } from './usage-tracker.js'
+import { UsageTracker, getPricing } from './usage-tracker.js'
+import { externalPricingStatus, getExternalPricingInfo, refreshExternalPricing } from './external-pricing.js'
 import { SanitizeLearner } from './sanitize-learner.js'
 import { RollingLatency } from './metrics.js'
 
@@ -121,6 +122,41 @@ export function createServer(
 
   app.get<{ Params: { date: string } }>('/usage/cost/:date', async (req) => {
     return usageTracker.getDailyCost(req.params.date)
+  })
+
+  // -------------------------------------------------------------------------
+  // Pricing — read-only visibility into the tables behind cost calculations.
+  // ?model= reports the effective price a call with that model would record.
+  // -------------------------------------------------------------------------
+
+  app.get('/pricing', async (req) => {
+    const model = (req.query as Record<string, string | undefined>).model
+    if (model) {
+      return {
+        model,
+        effective: getPricing(model),
+        external: getExternalPricingInfo(model),
+        status: externalPricingStatus(),
+      }
+    }
+    return { status: externalPricingStatus() }
+  })
+
+  /**
+   * POST /pricing/refresh  { models: string[] }
+   *
+   * Re-checks the given models against llmpricing.dev, bypassing every cache.
+   * The desktop app sends the distinct models seen in usage; a fresh result
+   * outranks the bundled snapshot, so a changed price applies from the next
+   * recorded call without a gateway restart. Capped because each model is a
+   * live page fetch, sequentially.
+   */
+  app.post('/pricing/refresh', async (req) => {
+    const body = (req.body ?? {}) as { models?: unknown }
+    const models = Array.isArray(body.models)
+      ? body.models.filter((m): m is string => typeof m === 'string' && m.length > 0).slice(0, 100)
+      : []
+    return refreshExternalPricing(models)
   })
 
   app.all('/*', createProxyHandler(providerManager, healthTracker, config, stats, usageTracker, sanitizeLearner))

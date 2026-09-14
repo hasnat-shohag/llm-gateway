@@ -116,6 +116,9 @@ function buildEnv() {
     PORT: String(settings.port),
     PROVIDERS_PATH: providersPath(),
     USAGE_DB_PATH: join(userDataDir(), 'usage.db'),
+    // llmpricing.dev prices resolved at runtime persist here, so later runs
+    // price those models without touching the network.
+    EXTERNAL_PRICING_CACHE_PATH: join(userDataDir(), 'external-pricing.json'),
     STRATEGY: settings.strategy,
     LOG_LEVEL: settings.logLevel,
   }

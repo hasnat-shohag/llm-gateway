@@ -50,6 +50,10 @@ contextBridge.exposeInMainWorld('gw', {
     cost: (date) => ipcRenderer.invoke('usage:cost', { date }),
     exportCsv: (date) => ipcRenderer.invoke('usage:export', { date }),
   },
+  pricing: {
+    status: () => ipcRenderer.invoke('pricing:status'),
+    refresh: () => ipcRenderer.invoke('pricing:refresh'),
+  },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     update: (patch) => ipcRenderer.invoke('settings:update', patch),
