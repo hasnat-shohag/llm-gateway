@@ -8,12 +8,17 @@ runs without a second checkout beside it.
 2026-08-31).
 
 **Local divergence:** `provider-manager.ts`, `proxy.ts`, `config.ts`, `types.ts`,
-`usage-tracker.ts` and `openai-adapter.ts` no longer match that commit. They carry the
+`usage-tracker.ts`, `server.ts` and `openai-adapter.ts` no longer match that commit. They carry the
 `compatibility` routing field, the ordered attempt phases, and the Anthropic ⇄ Chat Completions
 translation ported from `~/llm-gateway-for-claude-code` branch `feat/openai-compatible-providers`
 (that branch's `protocol`/`models`/`tier` vocabulary was deliberately not adopted).
-`openai-adapter.ts` has no upstream counterpart at the pinned commit. Re-copying the pinned
-commit would silently drop all of it — diff before refreshing.
+`openai-adapter.ts`, `external-pricing.ts` and `external-pricing-data.ts` have no upstream
+counterpart at the pinned commit. The external-pricing pair sources non-Anthropic model prices
+from llmpricing.dev (generated snapshot + lazy per-model fetch, persisted beside `usage.db`);
+`usage-tracker.ts` consults it after its own Anthropic table, and `server.ts` exposes the
+read-only `GET /pricing` over it plus `POST /pricing/refresh`, which re-resolves given
+models against the live site so price changes apply without a new snapshot. Re-copying the
+pinned commit would silently drop all of it — diff before refreshing.
 
 ## Rules
 

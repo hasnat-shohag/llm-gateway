@@ -198,6 +198,78 @@ function gatewayPanel() {
   })
 }
 
+/* --------------------------------------------------------- model pricing */
+
+let pricingStatus = null
+let pricingStatusRequested = false
+let pricingBusy = false
+
+async function loadPricingStatus() {
+  const res = await window.gw.pricing.status()
+  if (res?.ok) {
+    pricingStatus = res.data?.status ?? null
+    render()
+  } else {
+    // Gateway down at first render — let a later render try again once it is up.
+    pricingStatusRequested = false
+  }
+}
+
+async function refreshPricing() {
+  if (pricingBusy) return
+  pricingBusy = true
+  render()
+  const res = await window.gw.pricing.refresh()
+  pricingBusy = false
+  if (!res?.ok) {
+    setFeedback(res?.error ?? 'price refresh failed', 'bad')
+  } else {
+    pricingStatus = res.data?.status ?? pricingStatus
+    const { refreshed, failed, skipped } = res.data
+    if (skipped) {
+      setFeedback('Network price lookups are disabled for this gateway run (LLMPRICING_FETCH=0).', 'warn')
+    } else if (refreshed.length === 0 && failed.length === 0) {
+      setFeedback('No metered models to re-check yet — a model is priced the first time it is used.', 'info')
+    } else {
+      setFeedback(
+        `Re-checked ${refreshed.length + failed.length} model${refreshed.length + failed.length === 1 ? '' : 's'} `
+          + `against llmpricing.dev (${failed.length} not listed). New prices apply from the next request.`,
+        'good',
+      )
+    }
+  }
+  render()
+  emit()
+}
+
+function pricingPanel() {
+  const s = pricingStatus
+  const summary = s
+    ? `snapshot ${s.snapshotCount} models · ${s.generatedAt} · ${s.resolvedCount} resolved live`
+    : null
+
+  return panel({
+    title: 'Model pricing',
+    subtitle: 'Non-Anthropic model prices come from llmpricing.dev.',
+    body: [
+      el('p', {
+        class: 'muted',
+        text: 'The app ships a price snapshot that is refreshed on every release, and looks up any model the snapshot misses the first time it is used. Fetching again re-checks every model you have used against the live site, so price changes apply without waiting for a release.',
+      }),
+      el('div', { class: 'row' }, [
+        button({
+          label: 'Fetch latest model prices',
+          text: pricingBusy ? 'Fetching…' : 'Fetch latest prices',
+          icon: 'refresh',
+          disabled: pricingBusy,
+          onClick: refreshPricing,
+        }),
+        summary ? el('span', { class: 'subtle mono', text: summary }) : null,
+      ]),
+    ],
+  })
+}
+
 /* ------------------------------------------------------------- appearance */
 
 const THEMES = [
@@ -304,7 +376,15 @@ export function render() {
     statusPanel(),
     claudePanel(),
     gatewayPanel(),
+    pricingPanel(),
     appearancePanel(),
     autostartPanel(),
   ])
+
+  // One status fetch for the pricing panel, the first time the tab renders —
+  // not per render, which the poll loop would turn into a request every tick.
+  if (!pricingStatusRequested) {
+    pricingStatusRequested = true
+    loadPricingStatus()
+  }
 }

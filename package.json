@@ -17,12 +17,14 @@
     "build:gateway": "tsc -p tsconfig.gateway.json && node scripts/finalize-gateway-build.js",
     "typecheck": "tsc -p tsconfig.gateway.json --noEmit",
     "gen:icon": "node scripts/generate-icon.js",
+    "gen:pricing": "node scripts/update-external-pricing.js",
     "start": "npm run build:gateway && electron . --ozone-platform=x11",
     "//dist": "--publish never is required, not cosmetic: electron-builder turns implicit publishing on when it detects a git tag in CI, and package.json `repository` gives it a GitHub provider to resolve, so without this it demands GH_TOKEN and fails. Release artifacts are attached by the workflow instead.",
     "dist": "npm run build:gateway && electron-builder --publish never",
     "//release": "Pre-flight checks, version bump, tag, and push. The workflow does the actual publishing. npm swallows bare arguments, so the bump has to come after `--`: npm run release -- patch",
     "release": "scripts/release.sh",
-    "test": "npm run build:gateway && node --test test/*.test.js",
+    "//test-env": "LLMPRICING_FETCH=0 keeps the lazy llmpricing.dev lookups out of the test run — tests must not depend on the network.",
+    "test": "npm run build:gateway && LLMPRICING_FETCH=0 node --test test/*.test.js",
     "postinstall": "node scripts/install-electron-native-deps.js"
   },
   "engines": {

@@ -142,6 +142,23 @@ function register() {
     return { ok: true, path: target.filePath }
   })
 
+  // --- pricing ---------------------------------------------------------------
+  ipcMain.handle('pricing:status', async () => gatewayClient.pricingStatus())
+
+  // A refresh re-checks the models actually in use against llmpricing.dev, so
+  // the model list comes from usage, not from the renderer: the renderer cannot
+  // know what was metered, and this keeps the channel's payload empty.
+  ipcMain.handle('pricing:refresh', async () => {
+    const usage = await gatewayClient.usage(500)
+    if (!usage.ok) return usage
+    const models = [...new Set(
+      (usage.data?.recentCalls ?? [])
+        .map((c) => c?.model)
+        .filter((m) => typeof m === 'string' && m.trim().length > 0)
+    )]
+    return gatewayClient.refreshPricing(models)
+  })
+
   // --- settings -------------------------------------------------------------
   ipcMain.handle('settings:get', async () => ({
     ...settingsStore.get(),

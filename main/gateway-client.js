@@ -1,6 +1,7 @@
 'use strict'
 /**
- * HTTP client for the gateway's existing read-only endpoints.
+ * HTTP client for the gateway's own endpoints — usage, stats, and the pricing
+ * tables behind cost calculations.
  *
  * Lives in the main process so the renderer never makes a network request — that
  * is what lets the renderer CSP be `connect-src 'none'` and keeps CORS entirely
@@ -54,6 +55,27 @@ async function getText(path, { timeoutMs = 10000 } = {}) {
   }
 }
 
+async function postJson(path, body, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetch(`${baseUrl()}${path}`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) {
+      return { ok: false, status: res.status, error: `gateway returned HTTP ${res.status}` }
+    }
+    return { ok: true, status: res.status, data: await res.json() }
+  } catch (err) {
+    return { ok: false, status: 0, error: err.name === 'AbortError' ? 'gateway timed out' : 'gateway unreachable' }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 async function cached(key, fn) {
   const hit = cache.get(key)
   const now = Date.now()
@@ -70,9 +92,14 @@ const usage = (limit = 50) => cached(`usage:${limit}`, () => getJson(`/usage?lim
 const dailyCost = (date) => cached(`cost:${date ?? 'today'}`, () =>
   getJson(date ? `/usage/cost/${encodeURIComponent(date)}` : '/usage/cost'))
 const exportCsv = (date) => getText(`/usage/export?date=${encodeURIComponent(date)}`)
+const pricingStatus = () => getJson('/pricing')
+// Each model in a refresh is a live page fetch on the gateway side, done
+// sequentially, so this is the one call that can legitimately take a while.
+const refreshPricing = (models) =>
+  postJson('/pricing/refresh', { models: models.slice(0, 100) }, { timeoutMs: 120000 })
 
 function invalidateCache() {
   cache.clear()
 }
 
-module.exports = { baseUrl, health, stats, enabledProviders, usage, dailyCost, exportCsv, invalidateCache }
+module.exports = { baseUrl, health, stats, enabledProviders, usage, dailyCost, exportCsv, pricingStatus, refreshPricing, invalidateCache }

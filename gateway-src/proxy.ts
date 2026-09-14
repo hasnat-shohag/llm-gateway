@@ -6,7 +6,7 @@ import { HealthTracker } from './health.js'
 import type { GatewayConfig, ProviderConfig, ProviderPricing, RequestCompatibility, RequestStats } from './types.js'
 import { generateRequestId, shouldRetry, removeAuthHeaders, sanitizeHeaders, sanitizeRequestBody, looksLikeSanitizeMismatch, isTerminalForPassthrough } from './utils.js'
 import { createLogger } from './logger.js'
-import { UsageTracker, calculateCost } from './usage-tracker.js'
+import { UsageTracker, calculateCost, hasKnownPricing } from './usage-tracker.js'
 import { SanitizeLearner } from './sanitize-learner.js'
 import { openAIChatUrl, isTranslated, toOpenAIRequest, estimateInputTokens, createOpenAIToAnthropicStream, fromOpenAIResponse, toAnthropicError } from './openai-adapter.js'
 
@@ -223,9 +223,10 @@ function createUsageInterceptor(
   requestedModel?: string,
   streamShape: RequestCompatibility = 'claude',
   pricing?: ProviderPricing,
-  // True when the upstream is not Anthropic and the provider declares no prices:
-  // token counts are still recorded, but pricing them against Anthropic's table
-  // would report a confidently wrong number.
+  // True when the upstream is not Anthropic and no table knows the model's
+  // price (no provider override, not in the Anthropic table, not on
+  // llmpricing.dev): token counts are still recorded, but pricing them
+  // against Anthropic's fallback would report a confidently wrong number.
   unpricedUpstream = false
 ): Transform {
   let inputTokens = 0
@@ -660,7 +661,10 @@ export function createProxyHandler(
               requestedModel,
               streamShape,
               provider.pricing,
-              !provider.pricing && (translate || compatibility === 'openai')
+              // llmpricing.dev prices non-Anthropic models the provider doesn't
+              // price itself; only a model no table knows records cost zero.
+              !provider.pricing && (translate || compatibility === 'openai') &&
+                !hasKnownPricing(requestedModel ?? '')
             )
             interceptor.on('error', swallowStreamError)
             return interceptor

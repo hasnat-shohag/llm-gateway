@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import { resolve } from 'path'
 import type { DailySummary, ProviderDailyStats, ProviderPricing, UsageRecord } from './types.js'
+import { getExternalPricing, getExternalPricingInfo } from './external-pricing.js'
 
 // ---------------------------------------------------------------------------
 // Anthropic pricing table (USD per 1M tokens), per the official pricing model:
@@ -12,6 +13,8 @@ import type { DailySummary, ProviderDailyStats, ProviderPricing, UsageRecord } f
 // Keys are prefix-matched against the model name returned by the API —
 // more specific prefixes MUST come before shorter ones.
 // Update this table when Anthropic changes prices.
+// Non-Anthropic models are priced by external-pricing.ts (llmpricing.dev);
+// this table always wins for claude-* models.
 // ---------------------------------------------------------------------------
 interface ModelPricing {
   input: number        // per 1M input tokens
@@ -19,6 +22,7 @@ interface ModelPricing {
   cacheRead: number    // per 1M cache-read tokens
   cacheWrite: number   // per 1M cache-creation tokens (5m TTL)
 }
+export type { ModelPricing }
 
 const PRICING: Array<{ prefix: string; pricing: ModelPricing }> = [
   // Frontier tier
@@ -49,10 +53,10 @@ const PRICING: Array<{ prefix: string; pricing: ModelPricing }> = [
 // Unknown models fall back to Sonnet-tier standard pricing
 const DEFAULT_PRICING: ModelPricing = { input: 3.00, output: 15.00, cacheRead: 0.30, cacheWrite: 3.75 }
 
-function getPricing(model: string, override?: ProviderPricing): ModelPricing {
-  // A provider that declares its own prices wins outright. The table below only
-  // knows Anthropic's models, and its fallback is Sonnet-tier — so without this a
-  // third-party model reports a plausible-looking wrong cost. Every field is
+export function getPricing(model: string, override?: ProviderPricing): ModelPricing {
+  // A provider that declares its own prices wins outright. The tables below only
+  // know list prices, and a third-party host may bill differently — so without
+  // this a provider's real invoice and the dashboard drift apart. Every field is
   // optional: a price left blank contributes nothing rather than guessing.
   if (override) {
     const input = override.input ?? 0
@@ -63,11 +67,38 @@ function getPricing(model: string, override?: ProviderPricing): ModelPricing {
       cacheWrite: override.cacheWrite ?? input,
     }
   }
+  // Anthropic's own table first — it carries cache rates the external table
+  // (input/output only) does not.
   const lower = model.toLowerCase()
   for (const entry of PRICING) {
     if (lower.startsWith(entry.prefix)) return entry.pricing
   }
+  // Aggregator-style ids ("anthropic/claude-…", "openai/gpt-…"): retry against
+  // the segment after the last slash before giving up on a table.
+  const bare = lower.slice(lower.lastIndexOf('/') + 1)
+  if (bare !== lower) {
+    for (const entry of PRICING) {
+      if (bare.startsWith(entry.prefix)) return entry.pricing
+    }
+  }
+  // llmpricing.dev (snapshot + lazily resolved) for everything else.
+  const external = getExternalPricing(model)
+  if (external) return external
   return DEFAULT_PRICING
+}
+
+/**
+ * Whether any table can price this model without a provider-level override.
+ * proxy.ts uses this to decide between recording a real cost and recording
+ * zero — an OpenAI-shaped model with no known price must not be priced at
+ * Anthropic's rates.
+ */
+export function hasKnownPricing(model: string): boolean {
+  const lower = model.toLowerCase()
+  const bare = lower.slice(lower.lastIndexOf('/') + 1)
+  const inAnthropicTable = (m: string) => PRICING.some((e) => m.startsWith(e.prefix))
+  return inAnthropicTable(lower) || (bare !== lower && inAnthropicTable(bare)) ||
+    getExternalPricingInfo(model) !== null
 }
 
 export function calculateCost(
